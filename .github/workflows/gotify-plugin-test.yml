@@ -1,0 +1,27 @@
+name: gotify-plugin-test
+
+on:
+  push:
+    paths:
+      - 'cmcc/**'
+      - 'gotify-plugin/**'
+      - '.github/workflows/gotify-plugin-test.yml'
+  pull_request:
+    paths:
+      - 'cmcc/**'
+      - 'gotify-plugin/**'
+      - '.github/workflows/gotify-plugin-test.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.0'
+      - working-directory: gotify-plugin
+        run: make check
+      - name: Build Gotify plugin
+        working-directory: gotify-plugin
+        run: make build-linux-amd64

@@ -1,0 +1,98 @@
+name: server-release
+
+on:
+  push:
+    tags: ['server/v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        goarch: [amd64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: server/web/package-lock.json
+      - name: Build embedded WebUI
+        working-directory: server/web
+        run: |
+          npm ci
+          npm run build
+      - name: Build standalone server
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        working-directory: server
+        run: |
+          VERSION="${RELEASE_TAG#server/v}"
+          mkdir -p ../dist
+          GOWORK=off go build -trimpath -ldflags="-s -w -X main.version=$VERSION" \
+            -o ../dist/cmcc-notify-linux-${{ matrix.goarch }} ./cmd/cmcc-notify
+          cd ../dist
+          sha256sum cmcc-notify-linux-${{ matrix.goarch }} \
+            > cmcc-notify-linux-${{ matrix.goarch }}.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.goarch }}
+          path: |
+            dist/cmcc-notify-linux-${{ matrix.goarch }}
+            dist/cmcc-notify-linux-${{ matrix.goarch }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: server-*
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/cmcc-notify-linux-*
+          generate_release_notes: true
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: release
+        name: Resolve release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: echo "version=${RELEASE_TAG#server/v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}-server
+          tags: |
+            type=raw,value=${{ steps.release.outputs.version }}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ steps.release.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

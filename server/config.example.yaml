@@ -1,0 +1,25 @@
+listen: ":8080"
+# Prefer an environment variable or mounted secret file. Do not commit a
+# bearer token.
+auth_token_env: CMCC_NOTIFY_AUTH_TOKEN
+# auth_token_file: /run/secrets/auth_token
+
+# Enables account and recipient-group changes from the WebUI. The directory
+# must be writable by the server process.
+state_file: /var/lib/cmcc-notify/state.yaml
+
+accounts:
+  - name: primary
+    enabled: true
+    api_key_env: CMCC_API_KEY
+    # api_key_file: /run/secrets/cmcc_api_key
+    default_to: "13800138000"
+    # Optional overrides; defaults are the official gateway endpoints.
+    # server_url: "wss://5gvas01.cmicmaap.com/gtw-ai/openclaw/ws/msg"
+    # upload_url: "https://5gvas01.cmicmaap.com/gtw-ai/openclaw/api"
+
+groups:
+  - name: family
+    recipients:
+      - "13800138000"
+      - "13900139000"

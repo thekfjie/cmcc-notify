@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+*.local.yaml
+*.local.yml
+bin
+build
+dist
+secrets
+tmp
+gotify-plugin/build
+gotify-plugin/dist
+server/bin
+server/web/node_modules

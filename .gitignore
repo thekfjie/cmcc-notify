@@ -1,0 +1,23 @@
+# Go build output
+bin/
+build/
+dist/
+*.so
+*.test
+
+# Local configuration and credentials
+.env
+*.local.yaml
+*.local.yml
+secrets/
+
+# Test/build caches
+.cache/
+coverage.out
+server/web/node_modules/
+server/web/*.tsbuildinfo
+
+# Editor/OS files
+.DS_Store
+.idea/
+.vscode/

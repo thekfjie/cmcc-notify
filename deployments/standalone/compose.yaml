@@ -1,0 +1,20 @@
+services:
+  cmcc-notify:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config.yaml:/etc/cmcc-notify/config.yaml:ro
+      - ./data:/var/lib/cmcc-notify
+    secrets:
+      - auth_token
+      - cmcc_api_key
+
+secrets:
+  auth_token:
+    file: ./secrets/auth_token
+  cmcc_api_key:
+    file: ./secrets/cmcc_api_key

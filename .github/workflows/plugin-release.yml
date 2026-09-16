@@ -1,0 +1,68 @@
+name: gotify-plugin-release
+
+on:
+  push:
+    tags: ['gotify-plugin/v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            image: docker.io/gotify/build:1.26.0-linux-amd64
+          - arch: arm64
+            platform: linux/arm64
+            image: docker.io/library/golang:1.26.0-bookworm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.0'
+      - uses: docker/setup-qemu-action@v3
+      - name: Check Gotify module compatibility
+        working-directory: gotify-plugin
+        run: make check-gotify-mod
+      - name: Build plugin
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          PLUGIN_VERSION="${RELEASE_TAG#gotify-plugin/v}"
+          mkdir -p dist
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e PLUGIN_VERSION="$PLUGIN_VERSION" \
+            -v "$PWD:/src" -w /src/gotify-plugin \
+            ${{ matrix.image }} \
+            sh -c 'GOWORK=off go build -mod=readonly -a -installsuffix cgo -buildmode=plugin \
+              -ldflags "-X main.version=$PLUGIN_VERSION" \
+              -o /src/dist/cmcc-notify-gotify-linux-${{ matrix.arch }}-for-gotify-v3.1.1.so .'
+          cd dist
+          sha256sum cmcc-notify-gotify-linux-${{ matrix.arch }}-for-gotify-v3.1.1.so \
+            > cmcc-notify-gotify-linux-${{ matrix.arch }}-for-gotify-v3.1.1.so.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gotify-plugin-${{ matrix.arch }}
+          path: |
+            dist/*.so
+            dist/*.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: gotify-plugin-*
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.so
+            dist/*.sha256
+          generate_release_notes: true
