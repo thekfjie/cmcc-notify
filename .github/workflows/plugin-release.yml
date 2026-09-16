@@ -44,7 +44,7 @@ jobs:
           cd dist
           sha256sum cmcc-notify-gotify-linux-${{ matrix.arch }}-for-gotify-v3.1.1.so \
             > cmcc-notify-gotify-linux-${{ matrix.arch }}-for-gotify-v3.1.1.so.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gotify-plugin-${{ matrix.arch }}
           path: |
