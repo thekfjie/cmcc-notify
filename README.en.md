@@ -58,14 +58,6 @@ dependencies do not enter the Gotify Plugin dependency graph.
 - Architecture: [docs/architecture.md](docs/architecture.md)
 - Protocol notes: [docs/cmcc-protocol.md](docs/cmcc-protocol.md)
 
-## Content rendering
-
-Real-device testing on September 17, 2026 showed that text is rendered as
-plain text with preserved line breaks, automatic URL detection, Unicode and
-emoji support. Markdown, HTML, tables and fenced code can be sent, but they are
-not rendered as formatted content. Images and files were verified through the
-upload-then-send flow.
-
 ## Development
 
 ```bash

@@ -95,21 +95,17 @@ Remote-media request:
 ```
 
 The plugin does not embed `caption` in the media frame. It sends a plain-text
-message first, followed by a media message without content. When `caption` is
-empty, the Gotify message body is used as companion text. This avoids losing
-the description on clients that do not display media-frame content.
+message first, followed by a separate media message. When `caption` is empty,
+the Gotify message body is used as companion text.
 
 The remote URL must be accessible to the CMCC gateway. Use the Standalone
 Server `/v1/send/media` endpoint when local-file upload is required.
 
-## Rendering
+## Message content
 
-Real-device testing on September 17, 2026 showed plain-text rendering with
-preserved line breaks, automatic URL detection, Unicode and emoji support.
-Markdown, HTML, tables and code fences are displayed as ordinary strings.
-A CMCC Notify 0.4.0 real-device check confirmed that media companion text
-appears first, followed by a separate multimedia notification and its client
-web entry.
+The plugin converts Gotify titles and message bodies into plain-text
+notifications. Media companion text and media content are sent as two ordered
+messages.
 
 HTTP `202 Accepted` or `accepted: true` only means the request was written to
 the CMCC gateway; it is not a delivery or read receipt.

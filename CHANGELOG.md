@@ -22,8 +22,7 @@ are released independently.
   per-minute rate limits.
 - Local-file media upload for single channels and per-channel group uploads.
 - Bilingual root, Standalone and Gotify Plugin README documentation.
-- Real-device content rendering notes for plain text, URL detection,
-  Unicode/emoji, images and files.
+- Documented text and media message behavior.
 - Channel API Key extraction from either a bare key or the complete ClawBot
   authorization message across SDK, Server WebUI/API and Gotify configuration.
 - A three-step activation guide that distinguishes the phone-level New Message
@@ -40,9 +39,7 @@ are released independently.
 - Uploaded group media is uploaded separately with every destination channel
   key before sending.
 - Media companion text is now sent as a separate plain-text message before a
-  content-free media frame, matching observed terminal behavior.
-- Confirmed the ordered text-then-media flow on a real CMCC client with the
-  deployed Standalone 0.4.0 build.
+  content-free media frame.
 
 ### Fixed
 

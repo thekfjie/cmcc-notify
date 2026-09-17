@@ -28,11 +28,10 @@ The normal product path omits `to`:
 }
 ```
 
-Live testing on September 17, 2026 confirmed that an authenticated key can
-deliver text to its bound user without a `to` field. The SDK still accepts an
-optional explicit `To` value for protocol-level compatibility, but the
-Standalone Server and Gotify Plugin do not require or expose a phone-number
-target.
+An authenticated key can route text to its bound user without a `to` field.
+The SDK still accepts an optional explicit `To` value for protocol-level
+compatibility, but the Standalone Server and Gotify Plugin do not require or
+expose a phone-number target.
 
 ## Media upload and send
 
@@ -60,34 +59,14 @@ The returned URL is then used in a media frame:
 ```
 
 Supported media discriminators are `IMAGE`, `TEXT`, `AUDIO`, `VIDEO` and
-`FILE`. Real-device tests verified an uploaded image and an uploaded file.
-Externally hosted media URLs may be accepted by the gateway but are less
-predictable than the upload-then-send flow.
+`FILE`. The supported product path uploads local media before sending the
+returned URL. Externally hosted media URLs may be accepted by the gateway but
+are less predictable than the upload-then-send flow.
 
-Real-device tests did not reliably display the `content` value of a media
-frame. The Standalone Server and Gotify Plugin therefore implement companion
-text as two ordered sends: a plain-text frame first, then a media frame with no
-`content` field. This is product behavior built on top of the protocol, not a
-native atomic text-and-media message.
-
-The ordered behavior was verified again on a real device on September 17,
-2026 with CMCC Notify 0.4.0: the companion text appeared first, followed by a
-separate multimedia notification containing the client-provided web link.
-This confirms the split-send approach preserves both the description and the
-media entry in the observed CMCC client.
-
-## Text rendering
-
-Real-device tests on September 17, 2026 established the following client
-behavior:
-
-- plain text and line breaks are preserved;
-- URLs are detected by the client;
-- Unicode and emoji are displayed;
-- Markdown, HTML, tables and fenced code are not rendered as formatting.
-
-Applications should therefore compose concise plain-text notifications and use
-ordinary URLs when additional detail is needed.
+The Standalone Server and Gotify Plugin implement companion text as two ordered
+sends: a plain-text frame first, then a media frame with no `content` field.
+This is product behavior built on top of the protocol, not a native atomic
+text-and-media message.
 
 ## Notification groups
 

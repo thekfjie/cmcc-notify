@@ -57,13 +57,6 @@ cmcc-notify/
 - 系统架构：[docs/architecture.md](docs/architecture.md)
 - 协议说明：[docs/cmcc-protocol.md](docs/cmcc-protocol.md)
 
-## 内容展示说明
-
-2026 年 9 月 17 日真实终端测试结果：文字按纯文本展示，保留换行，客户端会
-自动识别 URL，并支持 Unicode 与 Emoji。Markdown、HTML、表格和代码块可以作为
-普通字符串发送，但不会被格式化渲染。图片和文件已验证可通过“先上传、后发送”
-的流程投递。
-
 ## 开发
 
 ```bash

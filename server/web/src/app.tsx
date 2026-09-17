@@ -401,7 +401,6 @@ function DocsPage({ status }: { status: StatusResponse }) {
       <GuideStep number="3" icon={<BellRing />} title="创建生产通知应用">进入“账户状态” → “通知应用” → “新建应用”，固定绑定一个 CMCC 通道或通知组。Token 只显示一次，服务端仅保存哈希，并可设置每分钟请求上限。</GuideStep>
       <GuideStep number="4" icon={<KeyRound />} title="接入业务系统">业务系统使用应用 Token 调用 <code>POST /v1/notify</code>，正文只需提供 <code>title</code> 和 <code>message</code>。不要把 Token 放进 URL、前端代码或日志；泄露时在应用卡片中立即轮换。</GuideStep>
       <GuideStep number="5" icon={<Send />} title="用 WebUI 做联通测试">“发送消息”页面用于验证单个通道或通知组的文字与多媒体发送链路，并展示每个通道的网关提交结果。</GuideStep>
-      <GuideStep number="6" icon={<ImageIcon />} title="内容展示">2026 年 9 月 17 日实测：文字按纯文本展示，保留换行并自动识别 URL，支持 Unicode 与 Emoji；Markdown、HTML 和代码块不会被格式化渲染。媒体帧中的说明文字未稳定展示，因此填写随附文字时，系统会先发纯文本，再单独发送图片或文件。</GuideStep>
       <div className="info-note"><Activity />HTTP 202 代表请求已写入网关；HTTP 207 代表通知组部分通道写入失败。两者都不代表终端已经收到或阅读。</div>
     </section> : tab === "concepts" ? <ConceptsPanel /> : <><div className="docs-note"><KeyRound /><div><strong>两类 Bearer Token</strong><p>管理和测试接口使用管理令牌；生产通知入口 <code>/v1/notify</code> 使用独立应用 Token。除 <code>/healthz</code> 外均通过 <code>Authorization</code> 请求头传递，禁止放进 URL。</p></div></div><section className="docs-stack">{examples.map((example, index) => <article className="soft-card api-card" key={`${example.path}-${example.title}-${index}`}><div className="api-heading"><div><span className={cn("method", `method-${example.method.toLowerCase()}`)}>{example.method}</span><h2>{example.title}</h2></div><span className="auth-pill">{example.auth ? <><LockKeyhole />Bearer</> : "公开"}</span></div><code className="endpoint">{example.path}</code><div className="code-block"><pre>{example.code}</pre><button type="button" onClick={() => void copy(`${example.path}-${index}`, example.code)} aria-label={`复制${example.title}示例`}>{copied === `${example.path}-${index}` ? <Check /> : <Copy />}</button></div></article>)}</section><div className="info-note"><Activity />HTTP 202 仅表示请求已写入 CMCC 网关；通知组部分失败返回 HTTP 207。当前协议没有可靠的送达或已读回执。</div></>}
   </PageFrame>
@@ -418,7 +417,6 @@ function ConceptsPanel() {
       <ConceptCard icon={<BellRing />} title="通知应用" badge="调用身份">为监控、脚本、NAS 或 Agent 提供独立 Token，并固定绑定一个通道或通知组。</ConceptCard>
       <ConceptCard icon={<ShieldCheck />} title="管理令牌" badge="控制台权限">用于 WebUI 与管理接口，不应提供给普通业务系统；业务系统应使用应用 Token。</ConceptCard>
     </div>
-    <div className="docs-note"><FileText /><div><strong>文字展示</strong><p>当前实测为纯文本、自动 URL 识别与 Unicode/Emoji；Markdown、HTML 和代码块按普通字符串展示。</p></div></div>
   </section>
 }
 

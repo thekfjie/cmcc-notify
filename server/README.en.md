@@ -124,25 +124,16 @@ curl -X POST http://localhost:8080/v1/send/media \
   -F "file=@./screenshot.png"
 ```
 
-`caption` is optional companion text. Real-device clients did not reliably
-display text embedded in a media frame, so CMCC Notify sends the caption as a
-plain-text message first and then sends a media message without content. With
-an empty caption, only the media message is sent.
+`caption` is optional companion text. To keep the description consistently
+visible, CMCC Notify sends it first and then sends a separate media message.
+With an empty caption, only the media message is sent.
 
 Group uploads are performed separately for every channel. Supported request
 types are `AUTO`, `IMAGE`, `AUDIO`, `VIDEO` and `FILE`, with a 200 MiB limit.
 Remote media URLs are also accepted by `/v1/send`, but the upload flow is the
 recommended path.
 
-## Rendering and responses
-
-Real-device testing on September 17, 2026 showed plain-text rendering with
-preserved line breaks, automatic URL detection, Unicode and emoji support.
-Markdown, HTML, tables and fenced code are displayed as ordinary text. Images
-and files were verified through the upload-then-send flow. Media companion
-text is sent as a separate plain-text message before the media. A CMCC Notify
-0.4.0 real-device check confirmed the same order: the text appeared first,
-followed by a separate multimedia notification and its client web entry.
+## Response semantics
 
 HTTP `202 Accepted` means the request was written to the CMCC gateway. A group
 with partial failures returns `207 Multi-Status`. Neither status is a delivery

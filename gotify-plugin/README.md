@@ -105,20 +105,16 @@ GET  /plugin/<id>/custom/<plugin-token>/status
 }
 ```
 
-`caption` 不会写入媒体帧正文。插件会先发送一条纯文本，再发送不带正文的
-媒体消息；未填写 `caption` 时会使用 Gotify 消息正文作为随附文字。这样可避
-免终端收到媒体却不显示说明文字。
+`caption` 不会写入媒体帧正文。插件会先发送一条纯文本，再发送独立的媒体
+消息；未填写 `caption` 时会使用 Gotify 消息正文作为随附文字。
 
 远程媒体 URL 必须能被 CMCC 网关访问。需要上传本地文件时，建议使用
 Standalone Server 的 `/v1/send/media`。
 
-## 内容展示
+## 消息内容
 
-2026 年 9 月 17 日真实终端测试结果：文字按纯文本展示，保留换行，自动识别
-URL，并支持 Unicode 与 Emoji。Markdown、HTML、表格和代码块不会被格式化
-渲染。插件可继续转发这些字符串，但不会获得 Gotify 中的 Markdown 展示效果。
-CMCC Notify 0.4.0 的真实终端验证确认，媒体随附文字会先作为独立纯文本显示，
-随后出现单独的多媒体消息和客户端网页入口。
+插件将 Gotify 标题与正文转换为纯文本通知。媒体随附文字与媒体内容按两条消息
+依次发送。
 
 HTTP `202 Accepted` 或 SDK 返回 `accepted: true` 只表示请求已写入 CMCC 网关，
 不代表终端送达或已读。
