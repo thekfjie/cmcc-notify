@@ -16,7 +16,7 @@ import (
 )
 
 func TestMediaUploadUsesCMCCUploadBeforeSending(t *testing.T) {
-	frames := make(chan map[string]any, 1)
+	frames := make(chan map[string]any, 2)
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -38,8 +38,11 @@ func TestMediaUploadUsesCMCCUploadBeforeSending(t *testing.T) {
 			if err := conn.WriteJSON(map[string]string{"type": "auth_ok"}); err != nil {
 				return
 			}
-			var frame map[string]any
-			if err := conn.ReadJSON(&frame); err == nil {
+			for i := 0; i < 2; i++ {
+				var frame map[string]any
+				if err := conn.ReadJSON(&frame); err != nil {
+					return
+				}
 				frames <- frame
 			}
 		case "/api/upload":
@@ -85,7 +88,6 @@ func TestMediaUploadUsesCMCCUploadBeforeSending(t *testing.T) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	_ = writer.WriteField("account", "primary")
-	_ = writer.WriteField("to", "13800138000")
 	_ = writer.WriteField("type", "AUTO")
 	_ = writer.WriteField("caption", "photo")
 	part, err := writer.CreateFormFile("file", "photo.jpg")
@@ -111,19 +113,29 @@ func TestMediaUploadUsesCMCCUploadBeforeSending(t *testing.T) {
 	if !result.Accepted || result.MediaType != "IMAGE" || result.MediaURL == "" {
 		t.Fatalf("result = %#v", result)
 	}
-	select {
-	case frame := <-frames:
-		if frame["to"] != "13800138000" || frame["mediaType"] != "IMAGE" || frame["mediaUrl"] != "https://cdn.example.invalid/photo.jpg" || frame["mediaFileName"] != "photo.jpg" {
-			t.Fatalf("send frame = %#v", frame)
+	var sent []map[string]any
+	for i := 0; i < 2; i++ {
+		select {
+		case frame := <-frames:
+			sent = append(sent, frame)
+		case <-time.After(time.Second):
+			t.Fatal("missing CMCC companion text or media frame")
 		}
-	case <-time.After(time.Second):
-		t.Fatal("missing CMCC media send frame")
+	}
+	if _, exists := sent[0]["to"]; exists || sent[0]["content"] != "photo" || sent[0]["mediaType"] != nil {
+		t.Fatalf("companion text frame = %#v", sent[0])
+	}
+	if _, exists := sent[1]["to"]; exists || sent[1]["mediaType"] != "IMAGE" || sent[1]["mediaUrl"] != "https://cdn.example.invalid/photo.jpg" || sent[1]["mediaFileName"] != "photo.jpg" {
+		t.Fatalf("media frame = %#v", sent[1])
+	}
+	if _, exists := sent[1]["content"]; exists {
+		t.Fatalf("media frame must omit companion text: %#v", sent[1])
 	}
 }
 
 func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 	frames := make(chan map[string]any, 2)
-	uploads := make(chan struct{}, 1)
+	uploads := make(chan struct{}, 2)
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -140,11 +152,8 @@ func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 			if conn.WriteJSON(map[string]string{"type": "auth_ok"}) != nil {
 				return
 			}
-			for i := 0; i < 2; i++ {
-				var frame map[string]any
-				if conn.ReadJSON(&frame) != nil {
-					return
-				}
+			var frame map[string]any
+			if conn.ReadJSON(&frame) == nil {
 				frames <- frame
 			}
 		case "/api/upload":
@@ -152,7 +161,7 @@ func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 				t.Errorf("parse gateway upload: %v", err)
 				return
 			}
-			if r.FormValue("apiKey") != "ak_test" {
+			if !strings.HasPrefix(r.FormValue("apiKey"), "ak_") {
 				t.Errorf("upload apiKey = %q", r.FormValue("apiKey"))
 			}
 			uploads <- struct{}{}
@@ -171,8 +180,12 @@ func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 			Name: "primary", APIKey: "ak_test", Enabled: true,
 			ServerURL: "ws" + strings.TrimPrefix(gateway.URL, "http") + "/ws",
 			UploadURL: gateway.URL + "/api",
+		}, {
+			Name: "secondary", APIKey: "ak_secondary", Enabled: true,
+			ServerURL: "ws" + strings.TrimPrefix(gateway.URL, "http") + "/ws",
+			UploadURL: gateway.URL + "/api",
 		}},
-		Groups: []config.Group{{Name: "family", Recipients: []string{"13800138000", "13900139000"}}},
+		Groups: []config.Group{{Name: "family", Channels: []string{"primary", "secondary"}}},
 	}, "test")
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +194,6 @@ func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	_ = writer.WriteField("account", "primary")
 	_ = writer.WriteField("group", "family")
 	_ = writer.WriteField("type", "FILE")
 	part, err := writer.CreateFormFile("file", "archive.zip")
@@ -204,7 +216,7 @@ func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Mode != "local_fanout" || result.NativeBroadcast || result.Group != "family" || result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
+	if result.Mode != "channel_fanout" || result.Group != "family" || result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
 		t.Fatalf("result = %#v", result)
 	}
 	if result.MediaType != "FILE" || result.FileName != "archive.zip" || result.MediaURL != "https://cdn.example.invalid/archive.zip" {
@@ -215,25 +227,25 @@ func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 	default:
 		t.Fatal("CMCC upload was not called")
 	}
-	recipients := map[string]bool{}
+	select {
+	case <-uploads:
+	default:
+		t.Fatal("CMCC upload was not called for every channel")
+	}
 	for i := 0; i < 2; i++ {
 		select {
 		case frame := <-frames:
-			recipients[frame["to"].(string)] = true
-			if frame["mediaType"] != "FILE" || frame["mediaUrl"] != "https://cdn.example.invalid/archive.zip" || frame["mediaFileName"] != "archive.zip" {
+			if _, exists := frame["to"]; exists || frame["mediaType"] != "FILE" || frame["mediaUrl"] != "https://cdn.example.invalid/archive.zip" || frame["mediaFileName"] != "archive.zip" {
 				t.Fatalf("frame = %#v", frame)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("missing uploaded group media frame")
 		}
 	}
-	if !recipients["13800138000"] || !recipients["13900139000"] {
-		t.Fatalf("recipients = %#v", recipients)
-	}
 }
 
-func TestRemoteMediaGroupFansOutToEveryRecipient(t *testing.T) {
-	frames := make(chan map[string]any, 2)
+func TestRemoteMediaGroupFansOutToEveryChannel(t *testing.T) {
+	frames := make(chan []map[string]any, 2)
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -248,13 +260,15 @@ func TestRemoteMediaGroupFansOutToEveryRecipient(t *testing.T) {
 		if conn.WriteJSON(map[string]string{"type": "auth_ok"}) != nil {
 			return
 		}
+		pair := make([]map[string]any, 0, 2)
 		for i := 0; i < 2; i++ {
 			var frame map[string]any
 			if conn.ReadJSON(&frame) != nil {
 				return
 			}
-			frames <- frame
+			pair = append(pair, frame)
 		}
+		frames <- pair
 	}))
 	defer gateway.Close()
 
@@ -263,8 +277,11 @@ func TestRemoteMediaGroupFansOutToEveryRecipient(t *testing.T) {
 		Accounts: []config.Account{{
 			Name: "primary", APIKey: "ak_test", Enabled: true,
 			ServerURL: "ws" + strings.TrimPrefix(gateway.URL, "http"),
+		}, {
+			Name: "secondary", APIKey: "ak_secondary", Enabled: true,
+			ServerURL: "ws" + strings.TrimPrefix(gateway.URL, "http"),
 		}},
-		Groups: []config.Group{{Name: "family", Recipients: []string{"13800138000", "13900139000"}}},
+		Groups: []config.Group{{Name: "family", Channels: []string{"primary", "secondary"}}},
 	}, "test")
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +289,7 @@ func TestRemoteMediaGroupFansOutToEveryRecipient(t *testing.T) {
 	defer api.Close()
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(`{
-		"account":"primary","group":"family",
+		"group":"family",
 		"media":{"type":"IMAGE","url":"https://cdn.example.invalid/photo.jpg","caption":"photo"}
 	}`))
 	request.Header.Set("Authorization", "Bearer secret")
@@ -285,27 +302,28 @@ func TestRemoteMediaGroupFansOutToEveryRecipient(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Mode != "local_fanout" || result.NativeBroadcast || result.Total != 2 || result.AcceptedCount != 2 {
+	if result.Mode != "channel_fanout" || result.Total != 2 || result.AcceptedCount != 2 {
 		t.Fatalf("result = %#v", result)
 	}
-	recipients := map[string]bool{}
 	for i := 0; i < 2; i++ {
 		select {
-		case frame := <-frames:
-			recipients[frame["to"].(string)] = true
-			if frame["mediaType"] != "IMAGE" || frame["mediaUrl"] != "https://cdn.example.invalid/photo.jpg" {
-				t.Fatalf("frame = %#v", frame)
+		case pair := <-frames:
+			if _, exists := pair[0]["to"]; exists || pair[0]["content"] != "photo" || pair[0]["mediaType"] != nil {
+				t.Fatalf("companion text frame = %#v", pair[0])
+			}
+			if _, exists := pair[1]["to"]; exists || pair[1]["mediaType"] != "IMAGE" || pair[1]["mediaUrl"] != "https://cdn.example.invalid/photo.jpg" {
+				t.Fatalf("media frame = %#v", pair[1])
+			}
+			if _, exists := pair[1]["content"]; exists {
+				t.Fatalf("media frame must omit companion text: %#v", pair[1])
 			}
 		case <-time.After(time.Second):
-			t.Fatal("missing group media frame")
+			t.Fatal("missing group companion text or media frame")
 		}
-	}
-	if !recipients["13800138000"] || !recipients["13900139000"] {
-		t.Fatalf("recipients = %#v", recipients)
 	}
 }
 
-func TestGroupSendFansOutToEveryRecipient(t *testing.T) {
+func TestGroupSendFansOutToEveryChannel(t *testing.T) {
 	frames := make(chan map[string]any, 2)
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -322,11 +340,8 @@ func TestGroupSendFansOutToEveryRecipient(t *testing.T) {
 		if err := conn.WriteJSON(map[string]string{"type": "auth_ok"}); err != nil {
 			return
 		}
-		for i := 0; i < 2; i++ {
-			var frame map[string]any
-			if err := conn.ReadJSON(&frame); err != nil {
-				return
-			}
+		var frame map[string]any
+		if err := conn.ReadJSON(&frame); err == nil {
 			frames <- frame
 		}
 	}))
@@ -337,14 +352,17 @@ func TestGroupSendFansOutToEveryRecipient(t *testing.T) {
 		Accounts: []config.Account{{
 			Name: "primary", APIKey: "ak_test", Enabled: true,
 			ServerURL: "ws" + strings.TrimPrefix(gateway.URL, "http"),
+		}, {
+			Name: "secondary", APIKey: "ak_secondary", Enabled: true,
+			ServerURL: "ws" + strings.TrimPrefix(gateway.URL, "http"),
 		}},
-		Groups: []config.Group{{Name: "family", Recipients: []string{"13800138000", "13900139000"}}},
+		Groups: []config.Group{{Name: "family", Channels: []string{"primary", "secondary"}}},
 	}, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer api.Close()
-	request := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(`{"account":"primary","group":"family","text":"hello"}`))
+	request := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(`{"group":"family","text":"hello"}`))
 	request.Header.Set("Authorization", "Bearer secret")
 	response := httptest.NewRecorder()
 	api.Handler().ServeHTTP(response, request)
@@ -355,20 +373,18 @@ func TestGroupSendFansOutToEveryRecipient(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Mode != "local_fanout" || result.NativeBroadcast || result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
+	if result.Mode != "channel_fanout" || result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
 		t.Fatalf("result = %#v", result)
 	}
-	recipients := map[string]bool{}
 	for i := 0; i < 2; i++ {
 		select {
 		case frame := <-frames:
-			recipients[frame["to"].(string)] = true
+			if _, exists := frame["to"]; exists {
+				t.Fatalf("frame contains unexpected to: %#v", frame)
+			}
 		case <-time.After(time.Second):
 			t.Fatal("missing group send frame")
 		}
-	}
-	if !recipients["13800138000"] || !recipients["13900139000"] {
-		t.Fatalf("recipients = %#v", recipients)
 	}
 }
 

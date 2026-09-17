@@ -9,7 +9,10 @@ var (
 	ErrInvalidAPIKey = errors.New("cmcc: API key must start with ak_ or app_")
 	ErrNotConnected  = errors.New("cmcc: websocket is not connected")
 	ErrAuthFailed    = errors.New("cmcc: authentication failed")
-	ErrNoRecipient   = errors.New("cmcc: text messages require a recipient")
+	// ErrNoRecipient is retained for source compatibility. Self notifications
+	// no longer require an explicit recipient because the API key owns a
+	// default binding.
+	ErrNoRecipient = errors.New("cmcc: recipient is required")
 )
 
 // HTTPError preserves the status and response body for diagnostics without

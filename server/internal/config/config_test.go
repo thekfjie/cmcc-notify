@@ -78,7 +78,6 @@ applications:
   - name: monitoring
     enabled: true
     account: primary
-    to: "13800138000"
     token_env: TEST_APPLICATION_TOKEN
 `
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
@@ -101,8 +100,8 @@ func TestResolveRejectsDuplicateApplicationTokens(t *testing.T) {
 	cfg := Config{
 		Accounts: []Account{{Name: "primary", Enabled: false}},
 		Applications: []Application{
-			{Name: "one", Account: "primary", To: "13800138000", TokenHash: HashApplicationToken(token)},
-			{Name: "two", Account: "primary", To: "13900139000", TokenHash: HashApplicationToken(token)},
+			{Name: "one", Account: "primary", TokenHash: HashApplicationToken(token)},
+			{Name: "two", Account: "primary", TokenHash: HashApplicationToken(token)},
 		},
 	}
 	if err := cfg.ResolveAndValidate(); err == nil || !strings.Contains(err.Error(), "use the same token") {

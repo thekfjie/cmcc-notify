@@ -68,6 +68,45 @@ func TestClientConnectAndSendText(t *testing.T) {
 	}
 }
 
+func TestClientSendTextOmitsEmptyTarget(t *testing.T) {
+	frames := make(chan map[string]any, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, _, _ = conn.ReadMessage()
+		_ = conn.WriteJSON(map[string]string{"type": "auth_ok"})
+		var frame map[string]any
+		if conn.ReadJSON(&frame) == nil {
+			frames <- frame
+		}
+	}))
+	defer srv.Close()
+
+	client, err := NewClient("ak_test", Config{ServerURL: "ws" + strings.TrimPrefix(srv.URL, "http"), HeartbeatEvery: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.SendText(context.Background(), "", "self notification"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case frame := <-frames:
+		if _, exists := frame["to"]; exists || frame["content"] != "self notification" {
+			t.Fatalf("frame = %#v", frame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing text frame")
+	}
+}
+
 func TestClientNormalizesIncomingMedia(t *testing.T) {
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -174,12 +213,44 @@ func TestClientSendMediaIncludesRecipient(t *testing.T) {
 	}
 }
 
-func TestClientSendMediaRequiresRecipient(t *testing.T) {
-	client, err := NewClient("ak_test", Config{})
+func TestClientSendMediaOmitsEmptyTarget(t *testing.T) {
+	frames := make(chan map[string]any, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_, _, _ = conn.ReadMessage()
+		_ = conn.WriteJSON(map[string]string{"type": "auth_ok"})
+		var frame map[string]any
+		if conn.ReadJSON(&frame) == nil {
+			frames <- frame
+		}
+	}))
+	defer srv.Close()
+
+	client, err := NewClient("ak_test", Config{ServerURL: "ws" + strings.TrimPrefix(srv.URL, "http"), HeartbeatEvery: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.SendMedia(context.Background(), MediaMessage{MediaType: MediaImage, MediaURL: "https://example.invalid/a.jpg"}); err != ErrNoRecipient {
-		t.Fatalf("error = %v, want %v", err, ErrNoRecipient)
+	defer client.Close()
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.SendMedia(context.Background(), MediaMessage{MediaType: MediaImage, MediaURL: "https://example.invalid/a.jpg"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case frame := <-frames:
+		if _, exists := frame["to"]; exists || frame["mediaType"] != "IMAGE" {
+			t.Fatalf("frame = %#v", frame)
+		}
+		if _, exists := frame["content"]; exists {
+			t.Fatalf("empty media content must be omitted: %#v", frame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing media frame")
 	}
 }

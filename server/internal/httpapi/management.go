@@ -13,11 +13,11 @@ import (
 
 type accountSetting struct {
 	Name      string `json:"name"`
+	Note      string `json:"note,omitempty"`
 	Enabled   bool   `json:"enabled"`
 	Connected bool   `json:"connected"`
 	APIKey    string `json:"api_key"`
 	HasAPIKey bool   `json:"has_api_key"`
-	DefaultTo string `json:"default_to,omitempty"`
 	ServerURL string `json:"server_url,omitempty"`
 	UploadURL string `json:"upload_url,omitempty"`
 }
@@ -32,16 +32,16 @@ type settingsResponse struct {
 
 type accountMutation struct {
 	Name      string `json:"name"`
+	Note      string `json:"note"`
 	APIKey    string `json:"api_key"`
 	Enabled   bool   `json:"enabled"`
-	DefaultTo string `json:"default_to"`
 	ServerURL string `json:"server_url"`
 	UploadURL string `json:"upload_url"`
 }
 
 type groupMutation struct {
-	Name       string   `json:"name"`
-	Recipients []string `json:"recipients"`
+	Name     string   `json:"name"`
+	Channels []string `json:"channels"`
 }
 
 func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
@@ -82,8 +82,8 @@ func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("account already exists")
 		}
 		next.Accounts = append(next.Accounts, config.Account{
-			Name: request.Name, APIKey: strings.TrimSpace(request.APIKey), Enabled: request.Enabled,
-			DefaultTo: strings.TrimSpace(request.DefaultTo), ServerURL: strings.TrimSpace(request.ServerURL),
+			Name: request.Name, Note: strings.TrimSpace(request.Note), APIKey: strings.TrimSpace(request.APIKey), Enabled: request.Enabled,
+			ServerURL: strings.TrimSpace(request.ServerURL),
 			UploadURL: strings.TrimSpace(request.UploadURL),
 		})
 		return nil
@@ -132,16 +132,23 @@ func (s *Server) account(w http.ResponseWriter, r *http.Request) {
 				}
 				account := &next.Accounts[i]
 				account.Name = request.Name
+				account.Note = strings.TrimSpace(request.Note)
 				if key := strings.TrimSpace(request.APIKey); key != "" {
 					account.APIKey = key
 					account.APIKeyEnv = ""
 					account.APIKeyFile = ""
 				}
 				account.Enabled = request.Enabled
-				account.DefaultTo = strings.TrimSpace(request.DefaultTo)
 				account.ServerURL = strings.TrimSpace(request.ServerURL)
 				account.UploadURL = strings.TrimSpace(request.UploadURL)
 				if request.Name != name {
+					for j := range next.Groups {
+						for k, channel := range next.Groups[j].Channels {
+							if channel == name {
+								next.Groups[j].Channels[k] = request.Name
+							}
+						}
+					}
 					for j := range next.Applications {
 						if next.Applications[j].Account == name {
 							next.Applications[j].Account = request.Name
@@ -199,7 +206,7 @@ func (s *Server) groups(w http.ResponseWriter, r *http.Request) {
 		if _, exists := next.Group(request.Name); exists {
 			return fmt.Errorf("group already exists")
 		}
-		next.Groups = append(next.Groups, config.Group{Name: request.Name, Recipients: request.Recipients})
+		next.Groups = append(next.Groups, config.Group{Name: request.Name, Channels: request.Channels})
 		return nil
 	}); err != nil {
 		writeMutationError(w, err)
@@ -233,7 +240,7 @@ func (s *Server) group(w http.ResponseWriter, r *http.Request) {
 		if err := s.updateConfig(false, func(next *config.Config) error {
 			for i := range next.Groups {
 				if next.Groups[i].Name == name {
-					next.Groups[i].Recipients = request.Recipients
+					next.Groups[i].Channels = request.Channels
 					return nil
 				}
 			}
@@ -306,19 +313,18 @@ func (s *Server) settingsResponse(cfg config.Config) settingsResponse {
 	for _, account := range cfg.Accounts {
 		client := clients[account.Name]
 		response.Accounts = append(response.Accounts, accountSetting{
-			Name: account.Name, Enabled: account.Enabled,
+			Name: account.Name, Note: account.Note, Enabled: account.Enabled,
 			Connected: account.Enabled && client != nil && client.Connected(),
 			APIKey:    maskAPIKey(account.APIKey), HasAPIKey: account.APIKey != "",
-			DefaultTo: account.DefaultTo, ServerURL: account.ServerURL, UploadURL: account.UploadURL,
+			ServerURL: account.ServerURL, UploadURL: account.UploadURL,
 		})
 	}
 	response.Applications = make([]applicationSetting, 0, len(cfg.Applications))
 	for _, application := range cfg.Applications {
 		response.Applications = append(response.Applications, applicationSetting{
 			Name: application.Name, Enabled: application.Enabled, Account: application.Account,
-			To: application.To, Group: application.Group,
-			AllowRecipientOverride: application.AllowRecipientOverride,
-			RateLimitPerMinute:     application.RateLimitPerMinute, TokenHint: application.TokenHint,
+			Group:              application.Group,
+			RateLimitPerMinute: application.RateLimitPerMinute, TokenHint: application.TokenHint,
 		})
 	}
 	return response

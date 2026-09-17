@@ -1,17 +1,23 @@
 package main
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gorilla/websocket"
 	gotifyplugin "github.com/gotify/plugin-api"
+	"github.com/thekfjie/cmcc-notify/cmcc"
 )
 
 func TestValidateConfig(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.Enabled = true
 	cfg.ClientToken = "Cclient-token"
-	cfg.Accounts = []AccountConfig{{Name: "primary", APIKey: "ak_test", Enabled: true, DefaultTo: "13800138000"}}
+	cfg.Accounts = []AccountConfig{{Name: "primary", Note: "主通道", APIKey: "ak_test", Enabled: true}}
 	if err := validateConfig(cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -22,10 +28,10 @@ func TestDisplayUsesGotifyNativeMarkdownAndRedactsSecrets(t *testing.T) {
 		config: &Config{
 			Enabled: true,
 			Accounts: []AccountConfig{{
-				Name:      "primary",
-				APIKey:    "ak_example-secret-value",
-				Enabled:   true,
-				DefaultTo: "13800138000",
+				Name:    "primary",
+				Note:    "主通道",
+				APIKey:  "ak_example-secret-value",
+				Enabled: true,
 			}},
 			Routes: []RouteConfig{{Applications: []uint{1, 2}, Accounts: []string{"primary"}, MinimumPriority: 5}},
 		},
@@ -41,7 +47,7 @@ func TestDisplayUsesGotifyNativeMarkdownAndRedactsSecrets(t *testing.T) {
 		"## CMCC Notify",
 		"| 已成功转发 | 3 |",
 		"ak_***lue",
-		"138****8000",
+		"主通道",
 		"1, 2",
 		"POST /plugin/1/custom/token/send",
 	} {
@@ -49,7 +55,7 @@ func TestDisplayUsesGotifyNativeMarkdownAndRedactsSecrets(t *testing.T) {
 			t.Fatalf("display does not contain %q:\n%s", expected, display)
 		}
 	}
-	for _, secret := range []string{"ak_example-secret-value", "13800138000"} {
+	for _, secret := range []string{"ak_example-secret-value"} {
 		if strings.Contains(display, secret) {
 			t.Fatalf("display leaked %q", secret)
 		}
@@ -67,10 +73,70 @@ func TestValidateConfigRejectsUnknownRouteAccount(t *testing.T) {
 
 func TestExtractMedia(t *testing.T) {
 	media, ok := extractMedia(map[string]interface{}{
-		"cmcc::media": map[string]interface{}{"to": "13800138000", "type": "IMAGE", "url": "https://example.invalid/a.jpg"},
+		"cmcc::media": map[string]interface{}{"type": "IMAGE", "url": "https://example.invalid/a.jpg"},
 	})
-	if !ok || media.URL == "" || media.Type != "IMAGE" || media.To != "13800138000" {
+	if !ok || media.URL == "" || media.Type != "IMAGE" {
 		t.Fatalf("media=%#v ok=%t", media, ok)
+	}
+}
+
+func TestMediaForwardSendsCompanionTextBeforeMedia(t *testing.T) {
+	frames := make(chan []map[string]any, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		var auth map[string]any
+		if conn.ReadJSON(&auth) != nil || conn.WriteJSON(map[string]string{"type": "auth_ok"}) != nil {
+			return
+		}
+		pair := make([]map[string]any, 0, 2)
+		for i := 0; i < 2; i++ {
+			var frame map[string]any
+			if conn.ReadJSON(&frame) != nil {
+				return
+			}
+			pair = append(pair, frame)
+		}
+		frames <- pair
+	}))
+	defer gateway.Close()
+
+	client, err := cmcc.NewClient("ak_test", cmcc.Config{
+		ServerURL:      "ws" + strings.TrimPrefix(gateway.URL, "http"),
+		HeartbeatEvery: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	plugin := &GotifyPlugin{clients: map[string]*accountClient{"primary": {client: client}}}
+	cfg := &Config{Accounts: []AccountConfig{{Name: "primary", APIKey: "ak_test", Enabled: true}}}
+	message := gotifyMessage{Message: "deployment report", Extras: map[string]interface{}{
+		"cmcc::media": map[string]interface{}{
+			"type": "IMAGE", "url": "https://cdn.example.invalid/report.jpg", "caption": "release complete",
+		},
+	}}
+	if err := plugin.forwardToAccount(context.Background(), message, "primary", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case pair := <-frames:
+		if pair[0]["content"] != "release complete" || pair[0]["mediaType"] != nil {
+			t.Fatalf("companion text frame = %#v", pair[0])
+		}
+		if pair[1]["mediaType"] != "IMAGE" || pair[1]["mediaUrl"] != "https://cdn.example.invalid/report.jpg" {
+			t.Fatalf("media frame = %#v", pair[1])
+		}
+		if _, exists := pair[1]["content"]; exists {
+			t.Fatalf("media frame must omit companion text: %#v", pair[1])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing companion text or media frame")
 	}
 }
 

@@ -19,7 +19,7 @@ if err != nil {
 if err := client.Connect(ctx); err != nil {
     log.Fatal(err)
 }
-result, err := client.SendText(ctx, "recipient", "hello")
+result, err := client.SendText(ctx, "", "hello")
 ```
 
 `result.Accepted` confirms a successful socket write. It is not a delivery or

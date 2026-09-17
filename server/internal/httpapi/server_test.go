@@ -36,10 +36,10 @@ func TestStatusIsAuthenticatedAndRedacted(t *testing.T) {
 	api, err := New(config.Config{
 		AuthToken: "secret",
 		Accounts: []config.Account{{
-			Name:      "primary",
-			APIKey:    "ak_example-secret-value",
-			Enabled:   true,
-			DefaultTo: "13800138000",
+			Name:    "primary",
+			Note:    "主用通知通道",
+			APIKey:  "ak_example-secret-value",
+			Enabled: true,
 		}},
 	}, "1.2.3")
 	if err != nil {
@@ -77,8 +77,8 @@ func TestStatusIsAuthenticatedAndRedacted(t *testing.T) {
 	if strings.Contains(response.Body.String(), "ak_example-secret-value") || account.APIKey != "ak_***alue" {
 		t.Fatalf("API key was not safely redacted: %q", account.APIKey)
 	}
-	if account.DefaultTo != "13800138000" {
-		t.Fatalf("recipient = %q", account.DefaultTo)
+	if account.Note != "主用通知通道" {
+		t.Fatalf("note = %q", account.Note)
 	}
 }
 
@@ -136,12 +136,13 @@ func TestSendValidatesBeforeConnecting(t *testing.T) {
 		body string
 		want string
 	}{
-		{body: `{"account":"primary","to":"13800138000","text":" "}`, want: "text is required"},
-		{body: `{"account":"primary","text":"hello"}`, want: "recipient is required"},
+		{body: `{"account":"primary","text":" "}`, want: "text is required"},
 		{body: `{"account":"primary","media":{"type":"IMAGE","url":" "}}`, want: "media.url is required"},
 		{body: `{"account":"primary","media":{"type":"IMAGE","url":"file:///tmp/a.jpg"}}`, want: "media.url must use http or https"},
-		{body: `{"account":"primary","media":{"type":"IMAGE","url":"https://example.invalid/a.jpg"}}`, want: "recipient is required"},
-		{body: `{"account":"primary","to":"13800138000","group":"family","text":"hello"}`, want: "to and group cannot be used together"},
+		{body: `{"account":"primary","to":"13800138000","text":"hello"}`, want: "invalid JSON"},
+		{body: `{"group":"missing","text":"hello"}`, want: "unknown group"},
+		{body: `{"account":"primary","group":"missing","text":"hello"}`, want: "account and group cannot be used together"},
+		{body: `{"account":"missing","text":"hello"}`, want: "unknown or disabled channel"},
 	}
 	for _, test := range tests {
 		request := httptest.NewRequest(http.MethodPost, "/v1/send", strings.NewReader(test.body))

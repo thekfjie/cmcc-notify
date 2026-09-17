@@ -1,87 +1,98 @@
 # CMCC protocol notes
 
-These notes are derived from a static audit of the CMCC-distributed
-`openclaw-cmcc-newmsg-channel-1.0.0.tgz` channel reference package downloaded
-on 2026-09-16. The package is protocol evidence only: CMCC Notify neither
-depends on nor deploys OpenClaw. The installer was not executed and no
-credential was embedded in the audit.
-
-The public China Mobile installation guide is
+This document records the protocol behavior implemented by the shared SDK and
+verified by the project. The China Mobile channel guide is available at
 [`channel-guide.md`](https://5gvas01.cmicmaap.com/aifile/public/file/channel-guide.md).
-It describes the China Mobile New Message Channel as supporting text and
-rich-media messages. Recipient-addressed rich-media delivery was subsequently
-verified against the live gateway and a real China Mobile New Message client
-on 2026-09-16. The public guide does not document a recipient-array API,
-native broadcast, `groupId`, delivery receipts, or the authorization scope of
-arbitrary `to` values.
 
-## Connection
+## Endpoints and authentication
 
-- WebSocket endpoint: `wss://5gvas01.cmicmaap.com/gtw-ai/openclaw/ws/msg`
-- Upload base URL: `https://5gvas01.cmicmaap.com/gtw-ai/openclaw/api`
-- Protocol version: `2.0`
+- WebSocket: `wss://5gvas01.cmicmaap.com/gtw-ai/openclaw/ws/msg`
+- Upload base: `https://5gvas01.cmicmaap.com/gtw-ai/openclaw/api`
 - Handshake header: `X-API-Key: <key>`
-- First frame: `{"type":"auth","apiKey":"<key>","version":"2.0"}`
-- Authentication result: `{"type":"auth_ok"}` or `{"type":"auth_failed",...}`
-- Heartbeat: client sends `{"type":"ping"}` every 15 seconds and expects
-  `{"type":"pong"}` within 10 seconds.
+- Initial frame: `{"type":"auth","apiKey":"<key>","version":"2.0"}`
+- Success frame: `{"type":"auth_ok"}`
 
-## Outbound frames
+The SDK sends periodic `ping` frames, monitors `pong`, and reconnects with
+backoff after connection loss.
 
-Text:
+## Text send
 
-```json
-{"type":"send","apiKey":"ak_...","to":"13800138000","content":"hello","messageId":"msg_..."}
-```
-
-Rich media:
+The normal product path omits `to`:
 
 ```json
 {
-  "type":"send",
-  "apiKey":"ak_...",
-  "to":"13800138000",
-  "mediaType":"IMAGE",
-  "content":"caption",
-  "mediaUrl":"https://...",
-  "messageId":"msg_..."
+  "type": "send",
+  "apiKey": "ak_...",
+  "content": "hello",
+  "messageId": "msg_..."
+}
+```
+
+Live testing on September 17, 2026 confirmed that an authenticated key can
+deliver text to its bound user without a `to` field. The SDK still accepts an
+optional explicit `To` value for protocol-level compatibility, but the
+Standalone Server and Gotify Plugin do not require or expose a phone-number
+target.
+
+## Media upload and send
+
+Files are uploaded with `multipart/form-data` to `/upload`:
+
+- `file`: the binary payload;
+- `apiKey`: the Channel API Key.
+
+Success code `10200` returns the media URL in `data`. The client-side maximum
+upload size is 200 MiB.
+
+The returned URL is then used in a media frame:
+
+```json
+{
+  "type": "send",
+  "apiKey": "ak_...",
+  "mediaType": "IMAGE",
+  "mediaUrl": "https://...",
+  "mediaFileName": "photo.jpg",
+  "mediaMimeType": "image/jpeg",
+  "mediaSize": 12345,
+  "messageId": "msg_..."
 }
 ```
 
 Supported media discriminators are `IMAGE`, `TEXT`, `AUDIO`, `VIDEO` and
-`FILE`. The distributed reference implementation omitted `to` from its media
-builder, but live testing established that proactive rich-media delivery uses
-the same explicit `to` recipient field as text. A PNG image and an 8.6 MiB ZIP
-file both produced `media_processed` and were received by the target terminal.
+`FILE`. Real-device tests verified an uploaded image and an uploaded file.
+Externally hosted media URLs may be accepted by the gateway but are less
+predictable than the upload-then-send flow.
 
-## Upload
+Real-device tests did not reliably display the `content` value of a media
+frame. The Standalone Server and Gotify Plugin therefore implement companion
+text as two ordered sends: a plain-text frame first, then a media frame with no
+`content` field. This is product behavior built on top of the protocol, not a
+native atomic text-and-media message.
 
-The package posts multipart form data to `/upload` with:
+## Text rendering
 
-- `file`: binary upload, filename preserved;
-- `apiKey`: the CMCC API key.
+Real-device tests on September 17, 2026 established the following client
+behavior:
 
-The expected JSON response is a `DataResult`; code `10200` is success and the
-remote media URL is returned in `data`. The reference implementation uses a
-200 MiB client-side limit and a 60-second upload timeout.
+- plain text and line breaks are preserved;
+- URLs are detected by the client;
+- Unicode and emoji are displayed;
+- Markdown, HTML, tables and fenced code are not rendered as formatting.
 
-## Recipient routing and local fan-out
+Applications should therefore compose concise plain-text notifications and use
+ordinary URLs when additional detail is needed.
 
-The observed and tested outbound schema uses a single `to` value per `send`
-frame. CMCC Notify therefore treats `to` as active routing data, not descriptive
-phone metadata. Whether a particular target is authorized remains a CMCC
-gateway decision; this project must not be described as an unrestricted SMS
-gateway.
+## Notification groups
 
-There is currently no verified native CMCC group/broadcast frame. Standalone
-`groups[].recipients` is a local list of `to` values. One group request sends N
-separate frames through the selected Channel API Key and returns per-target
-write results. See [`concepts.md`](concepts.md) for the user-facing terminology.
+No native group frame is used by this project. A Standalone notification group
+contains multiple configured Channel API Keys. CMCC Notify sends one frame per
+channel and returns `channel_fanout` results. For local media uploads, each
+channel uploads with its own key before sending.
 
-## Delivery semantics
+## Acknowledgement semantics
 
-The gateway returned `media_processed` for both verified media sends. This is
-stronger than local WebSocket write completion, but it is not documented as a
-delivery or read receipt. No reliable text `send_ok`, terminal delivery receipt
-or read receipt was found. cmcc-notify therefore reports socket acceptance
-separately and does not automatically retry an ambiguous accepted send.
+Local WebSocket write success and HTTP `202 Accepted` mean the gateway accepted
+the request. `media_processed` indicates media processing by the gateway. The
+project does not treat either result as a reliable terminal delivery or read
+receipt.

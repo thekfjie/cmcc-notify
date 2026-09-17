@@ -245,8 +245,20 @@ button:focus-visible { outline: 3px solid color-mix(in oklab, var(--ring) 45%, t
 .group-heading > div:last-child { display: flex; flex-direction: column; }
 .group-heading strong { font-size: 14px; }
 .group-heading span { margin-top: 4px; color: var(--muted-foreground); font-size: 11px; }
-.recipient-chips { display: flex; flex-wrap: wrap; gap: 7px; min-height: 64px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
-.recipient-chips span { padding: 6px 9px; border-radius: 9px; color: var(--secondary-foreground); background: var(--secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; box-shadow: var(--soft-inset); }
+.channel-chips { display: flex; flex-wrap: wrap; gap: 7px; min-height: 64px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); }
+.channel-chips span { padding: 6px 9px; border-radius: 9px; color: var(--secondary-foreground); background: var(--secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; box-shadow: var(--soft-inset); }
+.channel-picker { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; }
+.channel-picker legend { margin-bottom: 4px; color: var(--foreground); font-size: 12px; font-weight: 700; }
+.channel-picker > label { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in oklab, var(--background) 42%, transparent); cursor: pointer; transition: border-color .14s ease, background-color .14s ease, transform .14s ease; }
+.channel-picker > label:active { transform: scale(.99); }
+.channel-picker > label.selected { border-color: color-mix(in oklab, var(--primary) 45%, var(--border)); background: color-mix(in oklab, var(--primary) 7%, var(--card)); }
+.channel-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.channel-picker label span { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.channel-picker label strong { font-size: 12px; }
+.channel-picker label small { margin-top: 4px; color: var(--muted-foreground); font-size: 10px; }
+.channel-picker label > svg { width: 17px; height: 17px; color: var(--primary); opacity: 0; }
+.channel-picker label.selected > svg { opacity: 1; }
+.channel-picker > p { margin: 0; padding: 20px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted-foreground); text-align: center; font-size: 11px; }
 .two-fields { display: grid; grid-template-columns: minmax(180px, .4fr) minmax(0, 1fr); gap: 16px; }
 .file-picker { display: flex; align-items: center; justify-content: space-between; min-height: 88px; padding: 17px; border: 1px dashed color-mix(in oklab, var(--primary) 34%, var(--border)); border-radius: 16px; background: color-mix(in oklab, var(--primary) 4%, var(--card)); cursor: pointer; transition: transform .14s ease, border-color .14s ease, background-color .14s ease, box-shadow .14s ease; touch-action: manipulation; }
 .file-picker:active { transform: translateY(1px) scale(.99); box-shadow: var(--soft-inset); }

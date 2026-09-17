@@ -21,7 +21,7 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	handler := api.Handler()
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/accounts", strings.NewReader(`{
-  "name":"backup","api_key":"ak_backup","enabled":false,"default_to":"13800138000"
+  "name":"backup","note":"备用通知通道","api_key":"ak_backup","enabled":false
 }`))
 	request.Header.Set("Authorization", "Bearer secret")
 	response := httptest.NewRecorder()
@@ -29,9 +29,18 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("create account status = %d, body = %s", response.Code, response.Body.String())
 	}
+	request = httptest.NewRequest(http.MethodPost, "/v1/accounts", strings.NewReader(`{
+  "name":"secondary","note":"第二位接收者","api_key":"ak_secondary","enabled":false
+}`))
+	request.Header.Set("Authorization", "Bearer secret")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create second account status = %d, body = %s", response.Code, response.Body.String())
+	}
 
 	request = httptest.NewRequest(http.MethodPost, "/v1/groups", strings.NewReader(`{
-  "name":"family","recipients":["13800138000","13900139000","13800138000"]
+  "name":"family","channels":["backup","secondary","backup"]
 }`))
 	request.Header.Set("Authorization", "Bearer secret")
 	response = httptest.NewRecorder()
@@ -44,10 +53,10 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(state.Accounts) != 1 || state.Accounts[0].Name != "backup" || state.Accounts[0].APIKey != "ak_backup" {
+	if len(state.Accounts) != 2 || state.Accounts[0].Name != "backup" || state.Accounts[0].Note != "备用通知通道" || state.Accounts[0].APIKey != "ak_backup" {
 		t.Fatalf("persisted accounts = %#v", state.Accounts)
 	}
-	if len(state.Groups) != 1 || len(state.Groups[0].Recipients) != 2 {
+	if len(state.Groups) != 1 || len(state.Groups[0].Channels) != 2 {
 		t.Fatalf("persisted groups = %#v", state.Groups)
 	}
 
@@ -62,12 +71,12 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &settings); err != nil {
 		t.Fatal(err)
 	}
-	if !settings.Writable || settings.Accounts[0].APIKey != "ak_***ckup" || settings.Accounts[0].DefaultTo != "13800138000" {
+	if !settings.Writable || settings.Accounts[0].APIKey != "ak_***ckup" || settings.Accounts[0].Note != "备用通知通道" {
 		t.Fatalf("settings = %#v", settings)
 	}
 
 	request = httptest.NewRequest(http.MethodPost, "/v1/applications", strings.NewReader(`{
-  "name":"monitoring","enabled":false,"account":"backup","group":"family","rate_limit_per_minute":30
+  "name":"monitoring","enabled":false,"group":"family","rate_limit_per_minute":30
 }`))
 	request.Header.Set("Authorization", "Bearer secret")
 	response = httptest.NewRecorder()
@@ -77,7 +86,7 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	}
 
 	request = httptest.NewRequest(http.MethodPut, "/v1/accounts/backup", strings.NewReader(`{
-  "name":"primary","api_key":"","enabled":false,"default_to":"13800138000"
+  "name":"primary","note":"主通知通道","api_key":"","enabled":false
 }`))
 	request.Header.Set("Authorization", "Bearer secret")
 	response = httptest.NewRecorder()
@@ -88,7 +97,7 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &settings); err != nil {
 		t.Fatal(err)
 	}
-	if settings.Accounts[0].Name != "primary" || settings.Applications[0].Account != "primary" {
+	if settings.Accounts[0].Name != "primary" || settings.Accounts[0].Note != "主通知通道" || settings.Groups[0].Channels[0] != "primary" || settings.Applications[0].Group != "family" {
 		t.Fatalf("renamed settings = %#v", settings)
 	}
 
@@ -96,7 +105,7 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Accounts[0].Name != "primary" || state.Accounts[0].APIKey != "ak_backup" || state.Applications[0].Account != "primary" {
+	if state.Accounts[0].Name != "primary" || state.Accounts[0].APIKey != "ak_backup" || state.Groups[0].Channels[0] != "primary" || state.Applications[0].Group != "family" {
 		t.Fatalf("persisted rename = %#v", state)
 	}
 }

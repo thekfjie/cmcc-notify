@@ -256,11 +256,12 @@ func backoff(attempt int) time.Duration {
 }
 
 func (c *Client) SendText(ctx context.Context, to, content string) (SendResult, error) {
-	if strings.TrimSpace(to) == "" {
-		return SendResult{}, ErrNoRecipient
-	}
+	to = strings.TrimSpace(to)
 	messageID := newMessageID()
-	frame := map[string]any{"type": "send", "apiKey": c.apiKey, "to": to, "content": content, "messageId": messageID}
+	frame := map[string]any{"type": "send", "apiKey": c.apiKey, "content": content, "messageId": messageID}
+	if to != "" {
+		frame["to"] = to
+	}
 	if err := c.writeJSON(ctx, frame); err != nil {
 		return SendResult{}, err
 	}
@@ -269,9 +270,6 @@ func (c *Client) SendText(ctx context.Context, to, content string) (SendResult, 
 
 func (c *Client) SendMedia(ctx context.Context, message MediaMessage) (SendResult, error) {
 	message.To = strings.TrimSpace(message.To)
-	if message.To == "" {
-		return SendResult{}, ErrNoRecipient
-	}
 	if message.MediaType == "" || message.MediaURL == "" {
 		return SendResult{}, errors.New("cmcc: mediaType and mediaUrl are required")
 	}
@@ -283,10 +281,15 @@ func (c *Client) SendMedia(ctx context.Context, message MediaMessage) (SendResul
 	}
 	frame := map[string]any{
 		"type": "send", "apiKey": c.apiKey,
-		"to":        message.To,
-		"mediaType": message.MediaType, "content": message.Content,
-		"mediaUrl": message.MediaURL, "messageId": message.MessageID,
+		"mediaType": message.MediaType,
+		"mediaUrl":  message.MediaURL, "messageId": message.MessageID,
 		"timestamp": message.Timestamp,
+	}
+	if message.To != "" {
+		frame["to"] = message.To
+	}
+	if message.Content != "" {
+		frame["content"] = message.Content
 	}
 	if message.ThumbnailURL != "" {
 		frame["thumbnailUrl"] = message.ThumbnailURL

@@ -16,7 +16,9 @@ const (
 // MediaMessage is the outbound rich-media envelope. The gateway accepts a
 // URL; callers should upload local files first with Client.Upload.
 type MediaMessage struct {
-	To            string    `json:"to"`
+	// To is optional. When omitted, the gateway routes to the user bound to the
+	// Channel API Key. Set it only for an explicitly learned/authorized peer.
+	To            string    `json:"to,omitempty"`
 	MediaType     MediaType `json:"mediaType"`
 	Content       string    `json:"content,omitempty"`
 	MediaURL      string    `json:"mediaUrl"`

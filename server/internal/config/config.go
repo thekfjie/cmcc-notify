@@ -14,32 +14,30 @@ import (
 
 type Account struct {
 	Name       string `yaml:"name"`
+	Note       string `yaml:"note,omitempty"`
 	APIKey     string `yaml:"api_key"`
 	APIKeyEnv  string `yaml:"api_key_env"`
 	APIKeyFile string `yaml:"api_key_file"`
 	Enabled    bool   `yaml:"enabled"`
-	DefaultTo  string `yaml:"default_to"`
 	ServerURL  string `yaml:"server_url"`
 	UploadURL  string `yaml:"upload_url"`
 }
 
 type Group struct {
-	Name       string   `yaml:"name" json:"name"`
-	Recipients []string `yaml:"recipients" json:"recipients"`
+	Name     string   `yaml:"name" json:"name"`
+	Channels []string `yaml:"channels" json:"channels"`
 }
 
 type Application struct {
-	Name                   string `yaml:"name"`
-	Enabled                bool   `yaml:"enabled"`
-	Account                string `yaml:"account"`
-	To                     string `yaml:"to,omitempty"`
-	Group                  string `yaml:"group,omitempty"`
-	AllowRecipientOverride bool   `yaml:"allow_recipient_override,omitempty"`
-	RateLimitPerMinute     int    `yaml:"rate_limit_per_minute,omitempty"`
-	TokenHash              string `yaml:"token_hash,omitempty"`
-	TokenHint              string `yaml:"token_hint,omitempty"`
-	TokenEnv               string `yaml:"token_env,omitempty"`
-	TokenFile              string `yaml:"token_file,omitempty"`
+	Name               string `yaml:"name"`
+	Enabled            bool   `yaml:"enabled"`
+	Account            string `yaml:"account,omitempty"`
+	Group              string `yaml:"group,omitempty"`
+	RateLimitPerMinute int    `yaml:"rate_limit_per_minute,omitempty"`
+	TokenHash          string `yaml:"token_hash,omitempty"`
+	TokenHint          string `yaml:"token_hint,omitempty"`
+	TokenEnv           string `yaml:"token_env,omitempty"`
+	TokenFile          string `yaml:"token_file,omitempty"`
 }
 
 type Config struct {
@@ -106,6 +104,10 @@ func (c *Config) ResolveAndValidate() error {
 	for i := range c.Accounts {
 		a := &c.Accounts[i]
 		a.Name = strings.TrimSpace(a.Name)
+		a.Note = strings.TrimSpace(a.Note)
+		if len(a.Note) > 500 {
+			return fmt.Errorf("account %q note is too long", a.Name)
+		}
 		if a.Name == "" {
 			a.Name = fmt.Sprintf("account-%d", i+1)
 		}
@@ -140,9 +142,14 @@ func (c *Config) ResolveAndValidate() error {
 			return fmt.Errorf("duplicate group %q", group.Name)
 		}
 		groupNames[group.Name] = struct{}{}
-		group.Recipients = normalizeRecipients(group.Recipients)
-		if len(group.Recipients) == 0 {
-			return fmt.Errorf("group %q has no recipients", group.Name)
+		group.Channels = normalizeValues(group.Channels)
+		if len(group.Channels) == 0 {
+			return fmt.Errorf("group %q has no channels", group.Name)
+		}
+		for _, channel := range group.Channels {
+			if _, ok := seen[channel]; !ok {
+				return fmt.Errorf("group %q references unknown account %q", group.Name, channel)
+			}
 		}
 	}
 	applicationNames := make(map[string]struct{}, len(c.Applications))
@@ -151,7 +158,6 @@ func (c *Config) ResolveAndValidate() error {
 		application := &c.Applications[i]
 		application.Name = strings.TrimSpace(application.Name)
 		application.Account = strings.TrimSpace(application.Account)
-		application.To = strings.TrimSpace(application.To)
 		application.Group = strings.TrimSpace(application.Group)
 		application.TokenHash = strings.ToLower(strings.TrimSpace(application.TokenHash))
 		application.TokenEnv = strings.TrimSpace(application.TokenEnv)
@@ -163,11 +169,13 @@ func (c *Config) ResolveAndValidate() error {
 			return fmt.Errorf("duplicate application %q", application.Name)
 		}
 		applicationNames[application.Name] = struct{}{}
-		if _, ok := seen[application.Account]; !ok {
-			return fmt.Errorf("application %q references unknown account %q", application.Name, application.Account)
+		if (application.Account == "") == (application.Group == "") {
+			return fmt.Errorf("application %q must configure exactly one of account or group", application.Name)
 		}
-		if (application.To == "") == (application.Group == "") {
-			return fmt.Errorf("application %q must configure exactly one of to or group", application.Name)
+		if application.Account != "" {
+			if _, ok := seen[application.Account]; !ok {
+				return fmt.Errorf("application %q references unknown account %q", application.Name, application.Account)
+			}
 		}
 		if application.Group != "" {
 			if _, ok := groupNames[application.Group]; !ok {
@@ -278,7 +286,7 @@ func (c Config) SaveState() error {
 	return nil
 }
 
-func normalizeRecipients(values []string) []string {
+func normalizeValues(values []string) []string {
 	result := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {

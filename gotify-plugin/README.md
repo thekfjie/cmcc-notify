@@ -1,120 +1,130 @@
-# Gotify Plugin
+# CMCC Notify Gotify Plugin
 
-This directory is an independent Gotify v1 Go Plugin project. Gotify creates
-one plugin instance per user; each instance owns its CMCC channel configurations, routes and
-deduplication state.
+[简体中文](README.md) | [English](README.en.md)
 
-## Build and test
+这是一个独立的 Gotify v1 Go Plugin 项目，用于把 Gotify 消息转发到中国移动
+新消息。插件使用 Gotify 自带的配置编辑器和插件详情页，不嵌入 Standalone
+Server 的 WebUI。
 
-Run the module without the repository workspace:
+## 构建与测试
 
 ```bash
 GOWORK=off go test ./...
 make check
-```
-
-Build artifacts are tied to both the target architecture and exact Gotify
-version:
-
-```bash
 make build GOTIFY_VERSION=v3.1.1
 ```
 
-The current build target is Gotify 3.1.1. Re-run `make check-gotify-mod` and
-build against the matching Gotify/Go toolchain before changing that target.
+Go Plugin 产物必须与目标 Gotify 的版本、Go 工具链和 CPU 架构匹配。当前构建
+目标为 Gotify 3.1.1。
 
-## Configuration
+## 配置
 
-Configure the plugin in Gotify's plugin page. A minimal configuration is:
+在 Gotify 插件页面保存以下 YAML：
 
 ```yaml
 enabled: true
 gotify_url: http://127.0.0.1:80
 client_token: C_replace_with_a_dedicated_gotify_client_token
 include_title: true
-title_separator: "\\n\\n"
+title_separator: "\n\n"
+
 accounts:
   - name: primary
+    note: "运维值班手机"
     api_key: ak_replace_with_cmcc_key
     enabled: true
-    default_to: "13800138000"
+
 routes:
   - applications: [1, 2]
     accounts: [primary]
     minimum_priority: 0
 ```
 
-The `client_token` is required because the Gotify Plugin API does not expose a
-receive-all-messages callback. The plugin connects to the user's `/stream`
-endpoint with this dedicated token. Do not reuse an application token.
+- `client_token` 必须是专用的 Gotify Client Token。插件通过 `/stream` 接收该
+  用户可见的消息，不要填写 Gotify Application Token。
+- `accounts` 中每一项是一条 CMCC 通道，包含 Channel API Key、名称、可选备注
+  和启用状态，消息默认发送给该 Key 绑定用户。
+- `routes[].applications` 是 Gotify Application ID 列表；空列表表示全部应用。
+- `routes[].accounts` 是消息需要转发到的 CMCC 通道列表。
+- `minimum_priority` 只用于 Gotify 插件本地筛选。CMCC 消息本身不携带 Gotify
+  Priority 样式或优先级展示。
 
-Each item under `accounts` represents one **CMCC channel configuration**: a
-Channel API Key, connection state and optional default `to` target. The YAML
-name remains `accounts` for configuration compatibility; it is not a China
-Mobile customer account or a recipient record. The `to` value is active
-routing data, not a phone-number note.
+没有配置 `routes` 时，每条 Gotify 消息会转发到所有已启用 CMCC 通道。一个
+路由选择多个通道时，插件会为每个通道分别发送。
 
-The CMCC API key is validated for the documented `ak_`/`app_` prefixes and is
-never written to logs or the display page in full. Gotify's plugin config is
-stored in its database; operators should protect the database and backups.
+## Gotify 插件详情页
 
-## Gotify plugin page
+插件实现了 Gotify 的 `Configurer`、`Displayer`、`Storager` 和 `Webhooker`
+能力。Gotify 统一插件页面会显示：
 
-The plugin intentionally uses Gotify's native plugin detail page instead of
-embedding the Standalone Server WebUI. Gotify renders the YAML configuration
-editor through the plugin `Configurer` capability and renders a Markdown
-status summary through `Displayer`. The summary includes the Gotify stream,
-redacted CMCC channels, routing rules, forwarding counters and direct endpoint
-paths. Custom handlers remain under Gotify's standard plugin-token route.
+- 插件与 Gotify 消息流状态；
+- CMCC 通道连接状态和脱敏后的 API Key；
+- 路由规则、成功/失败计数与最近错误；
+- 插件直连接口路径。
 
-Channel names in the YAML `accounts` list are routing identifiers. If one is renamed,
-update the matching values in `routes[].accounts` in the same edit. The
-Standalone Server can migrate these references automatically because it owns
-both records; Gotify intentionally leaves YAML editing and validation inside
-its native plugin page.
+通道重命名后，应在同一次配置修改中同步更新 `routes[].accounts`。
 
-## Direct endpoint
+## 插件直连接口
 
-Gotify registers the plugin's custom route under the plugin token. The plugin
-adds:
+Gotify 会把自定义接口挂载在插件 Token 路径下：
 
 ```text
 POST /plugin/<id>/custom/<plugin-token>/send
 GET  /plugin/<id>/custom/<plugin-token>/status
 ```
 
-Text request:
+发送文字：
 
 ```json
-{"account":"primary","to":"13800138000","text":"hello"}
+{
+  "account": "primary",
+  "text": "backup completed"
+}
 ```
 
-CMCC rich-media request:
+发送远程媒体：
 
 ```json
-{"account":"primary","to":"13800138000","media":{"type":"IMAGE","url":"https://example.invalid/a.jpg","caption":"photo"}}
+{
+  "account": "primary",
+  "media": {
+    "type": "IMAGE",
+    "url": "https://example.com/screenshot.png",
+    "caption": "monitoring screenshot"
+  }
+}
 ```
 
-If `to` is omitted, the channel's `default_to` is used. Gotify stream media
-extras may also provide `to` or `phone`; otherwise forwarding uses the channel
-default. Recipient-addressed PNG image and ZIP file delivery was verified on
-2026-09-16. The plugin is a native Gotify product and does not require
-OpenClaw.
+`caption` 不会写入媒体帧正文。插件会先发送一条纯文本，再发送不带正文的
+媒体消息；未填写 `caption` 时会使用 Gotify 消息正文作为随附文字。这样可避
+免终端收到媒体却不显示说明文字。
 
-The plugin does not expose Standalone's local number-group feature. A routing
-rule may select multiple configured channels; in that case the plugin sends
-one message through each selected channel. That is plugin-side fan-out, not a
-native CMCC broadcast, group chat, `groupId` or recipient-array request.
+远程媒体 URL 必须能被 CMCC 网关访问。需要上传本地文件时，建议使用
+Standalone Server 的 `/v1/send/media`。
 
-The returned `accepted` field means the gateway accepted the WebSocket write;
-`acknowledged` remains false until the CMCC protocol defines a reliable text
-acknowledgement.
+## 内容展示
 
-## Community listing
+2026 年 9 月 17 日真实终端测试结果：文字按纯文本展示，保留换行，自动识别
+URL，并支持 Unicode 与 Emoji。Markdown、HTML、表格和代码块不会被格式化
+渲染。插件可继续转发这些字符串，但不会获得 Gotify 中的 Markdown 展示效果。
+媒体随附文字会作为独立纯文本消息先行发送。
 
-After the repository URL and first release are final, `gotify/contrib` can
-link directly to this directory:
+HTTP `202 Accepted` 或 SDK 返回 `accepted: true` 只表示请求已写入 CMCC 网关，
+不代表终端送达或已读。
+
+## 安装
+
+把与 Gotify 版本和架构匹配的 `.so` 文件放入 Gotify 插件目录，然后重启 Gotify。
+生产升级前请先备份 Gotify 数据库与插件配置。
+
+## 社区收录
+
+提交 `gotify/contrib` 时可以直接引用：
 
 ```text
 https://github.com/thekfjie/cmcc-notify/tree/main/gotify-plugin
 ```
+
+## License
+
+MIT

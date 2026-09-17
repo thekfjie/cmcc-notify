@@ -4,9 +4,9 @@ state_file: /var/lib/cmcc-notify/state.yaml
 
 accounts:
   - name: primary
+    note: "Primary notification channel"
     enabled: true
     api_key_file: /run/secrets/cmcc_api_key
-    default_to: "13800138000"
 
 groups: []
 

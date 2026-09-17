@@ -93,7 +93,6 @@ func (s *Server) Handler() http.Handler {
 
 type sendRequest struct {
 	Account string `json:"account"`
-	To      string `json:"to"`
 	Group   string `json:"group"`
 	Text    string `json:"text"`
 	Media   *struct {
@@ -120,10 +119,10 @@ type statusResponse struct {
 
 type accountStatus struct {
 	Name      string `json:"name"`
+	Note      string `json:"note,omitempty"`
 	Enabled   bool   `json:"enabled"`
 	Connected bool   `json:"connected"`
 	APIKey    string `json:"api_key"`
-	DefaultTo string `json:"default_to,omitempty"`
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
@@ -149,10 +148,10 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		client := clients[account.Name]
 		accounts = append(accounts, accountStatus{
 			Name:      account.Name,
+			Note:      account.Note,
 			Enabled:   account.Enabled,
 			Connected: account.Enabled && client != nil && client.Connected(),
 			APIKey:    maskAPIKey(account.APIKey),
-			DefaultTo: account.DefaultTo,
 		})
 	}
 	writeJSON(w, http.StatusOK, statusResponse{
@@ -174,17 +173,10 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request sendRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-	accountName := request.Account
-	if accountName == "" && len(cfg.Accounts) == 1 {
-		accountName = cfg.Accounts[0].Name
-	}
-	account, ok := cfg.Account(accountName)
-	if !ok || !account.Enabled {
-		writeError(w, http.StatusBadRequest, "unknown or disabled account")
 		return
 	}
 	if request.Media != nil {
@@ -202,26 +194,15 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	recipients, groupName, err := resolveRecipients(cfg, account, request.To, request.Group)
+	targets, groupName, err := resolveTargets(cfg, request.Account, request.Group)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	client, err := s.client(account)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if !client.Connected() {
-		if err := client.Connect(ctx); err != nil {
-			writeError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-	}
 	if request.Media != nil {
-		result, batch, sendErr := sendMediaToRecipients(ctx, client, recipients, groupName, cmcc.MediaMessage{
+		result, batch, sendErr := s.sendMediaToTargets(ctx, targets, groupName, cmcc.MediaMessage{
 			MediaType: parseMediaType(request.Media.Type, request.Media.MIMEType),
 			Content:   request.Media.Caption, MediaURL: request.Media.URL,
 			MediaFileName: request.Media.FileName, MediaMIMEType: request.Media.MIMEType,
@@ -238,7 +219,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, result)
 		return
 	}
-	result, batch, sendErr := sendTextToRecipients(ctx, client, recipients, groupName, request.Text)
+	result, batch, sendErr := s.sendTextToTargets(ctx, targets, groupName, request.Text)
 	if sendErr != nil {
 		writeError(w, http.StatusBadGateway, sendErr.Error())
 		return
@@ -250,57 +231,101 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, result)
 }
 
-type recipientSendResult struct {
-	To string `json:"to"`
+type channelSendResult struct {
+	Channel string `json:"channel"`
 	cmcc.SendResult
 	Error string `json:"error,omitempty"`
 }
 
 type batchSendResponse struct {
-	Mode            string                `json:"mode"`
-	NativeBroadcast bool                  `json:"native_broadcast"`
-	Group           string                `json:"group"`
-	Total           int                   `json:"total"`
-	AcceptedCount   int                   `json:"accepted_count"`
-	FailedCount     int                   `json:"failed_count"`
-	Results         []recipientSendResult `json:"results"`
+	Mode          string              `json:"mode"`
+	Group         string              `json:"group"`
+	Total         int                 `json:"total"`
+	AcceptedCount int                 `json:"accepted_count"`
+	FailedCount   int                 `json:"failed_count"`
+	Results       []channelSendResult `json:"results"`
 }
 
-func resolveRecipients(cfg config.Config, account config.Account, to, groupName string) ([]string, string, error) {
-	to = strings.TrimSpace(to)
+type sendTarget struct {
+	Account config.Account
+}
+
+func resolveTargets(cfg config.Config, accountName, groupName string) ([]sendTarget, string, error) {
+	accountName = strings.TrimSpace(accountName)
 	groupName = strings.TrimSpace(groupName)
-	if to != "" && groupName != "" {
-		return nil, "", errors.New("to and group cannot be used together")
+	if accountName != "" && groupName != "" {
+		return nil, "", errors.New("account and group cannot be used together")
 	}
 	if groupName != "" {
 		group, ok := cfg.Group(groupName)
 		if !ok {
 			return nil, "", errors.New("unknown group")
 		}
-		return append([]string(nil), group.Recipients...), group.Name, nil
+		targets := make([]sendTarget, 0, len(group.Channels))
+		for _, channel := range group.Channels {
+			account, exists := cfg.Account(channel)
+			if !exists || !account.Enabled {
+				return nil, "", errors.New("group contains an unknown or disabled channel")
+			}
+			targets = append(targets, sendTarget{Account: account})
+		}
+		return targets, group.Name, nil
 	}
-	if to == "" {
-		to = strings.TrimSpace(account.DefaultTo)
+	account, err := resolveAccount(cfg, accountName)
+	if err != nil {
+		return nil, "", err
 	}
-	if to == "" {
-		return nil, "", errors.New("recipient is required")
-	}
-	return []string{to}, "", nil
+	return []sendTarget{{Account: account}}, "", nil
 }
 
-func sendMediaToRecipients(ctx context.Context, client *cmcc.Client, recipients []string, groupName string, message cmcc.MediaMessage) (cmcc.SendResult, *batchSendResponse, error) {
+func resolveAccount(cfg config.Config, accountName string) (config.Account, error) {
+	if accountName == "" && len(cfg.Accounts) == 1 {
+		accountName = cfg.Accounts[0].Name
+	}
+	account, ok := cfg.Account(accountName)
+	if !ok || !account.Enabled {
+		return config.Account{}, errors.New("unknown or disabled channel")
+	}
+	return account, nil
+}
+
+func (s *Server) connectedClient(ctx context.Context, account config.Account) (*cmcc.Client, error) {
+	client, err := s.client(account)
+	if err != nil {
+		return nil, err
+	}
+	if !client.Connected() {
+		if err := client.Connect(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return client, nil
+}
+
+func (s *Server) sendMediaToTargets(ctx context.Context, targets []sendTarget, groupName string, message cmcc.MediaMessage) (cmcc.SendResult, *batchSendResponse, error) {
+	companionText := strings.TrimSpace(message.Content)
+	message.Content = ""
 	if groupName == "" {
-		message.To = recipients[0]
-		result, err := client.SendMedia(ctx, message)
+		client, err := s.connectedClient(ctx, targets[0].Account)
+		if err != nil {
+			return cmcc.SendResult{}, nil, err
+		}
+		result, err := sendMediaWithCompanionText(ctx, client, companionText, message)
 		return result, nil, err
 	}
-	response := &batchSendResponse{Mode: "local_fanout", NativeBroadcast: false, Group: groupName, Total: len(recipients)}
-	for _, recipient := range recipients {
-		message.To = recipient
+	response := &batchSendResponse{Mode: "channel_fanout", Group: groupName, Total: len(targets)}
+	for _, target := range targets {
 		message.MessageID = ""
 		message.Timestamp = 0
-		result, sendErr := client.SendMedia(ctx, message)
-		item := recipientSendResult{To: recipient, SendResult: result}
+		client, clientErr := s.connectedClient(ctx, target.Account)
+		var result cmcc.SendResult
+		var sendErr error
+		if clientErr != nil {
+			sendErr = clientErr
+		} else {
+			result, sendErr = sendMediaWithCompanionText(ctx, client, companionText, message)
+		}
+		item := channelSendResult{Channel: target.Account.Name, SendResult: result}
 		if sendErr != nil {
 			item.Error = sendErr.Error()
 			response.FailedCount++
@@ -312,15 +337,39 @@ func sendMediaToRecipients(ctx context.Context, client *cmcc.Client, recipients 
 	return cmcc.SendResult{}, response, nil
 }
 
-func sendTextToRecipients(ctx context.Context, client *cmcc.Client, recipients []string, groupName, content string) (cmcc.SendResult, *batchSendResponse, error) {
+// sendMediaWithCompanionText deliberately sends text and media as two gateway
+// messages. Current CMCC clients do not reliably render the content field of a
+// media frame, while a preceding plain-text frame is displayed consistently.
+func sendMediaWithCompanionText(ctx context.Context, client *cmcc.Client, companionText string, message cmcc.MediaMessage) (cmcc.SendResult, error) {
+	if companionText = strings.TrimSpace(companionText); companionText != "" {
+		if _, err := client.SendText(ctx, "", companionText); err != nil {
+			return cmcc.SendResult{}, err
+		}
+	}
+	message.Content = ""
+	return client.SendMedia(ctx, message)
+}
+
+func (s *Server) sendTextToTargets(ctx context.Context, targets []sendTarget, groupName, content string) (cmcc.SendResult, *batchSendResponse, error) {
 	if groupName == "" {
-		result, err := client.SendText(ctx, recipients[0], content)
+		client, err := s.connectedClient(ctx, targets[0].Account)
+		if err != nil {
+			return cmcc.SendResult{}, nil, err
+		}
+		result, err := client.SendText(ctx, "", content)
 		return result, nil, err
 	}
-	response := &batchSendResponse{Mode: "local_fanout", NativeBroadcast: false, Group: groupName, Total: len(recipients)}
-	for _, recipient := range recipients {
-		result, sendErr := client.SendText(ctx, recipient, content)
-		item := recipientSendResult{To: recipient, SendResult: result}
+	response := &batchSendResponse{Mode: "channel_fanout", Group: groupName, Total: len(targets)}
+	for _, target := range targets {
+		client, clientErr := s.connectedClient(ctx, target.Account)
+		var result cmcc.SendResult
+		var sendErr error
+		if clientErr != nil {
+			sendErr = clientErr
+		} else {
+			result, sendErr = client.SendText(ctx, "", content)
+		}
+		item := channelSendResult{Channel: target.Account.Name, SendResult: result}
 		if sendErr != nil {
 			item.Error = sendErr.Error()
 			response.FailedCount++
@@ -420,7 +469,7 @@ func cloneConfig(cfg config.Config) config.Config {
 	copyConfig.Groups = make([]config.Group, len(cfg.Groups))
 	for i, group := range cfg.Groups {
 		copyConfig.Groups[i] = group
-		copyConfig.Groups[i].Recipients = append([]string(nil), group.Recipients...)
+		copyConfig.Groups[i].Channels = append([]string(nil), group.Channels...)
 	}
 	copyConfig.Applications = append([]config.Application(nil), cfg.Applications...)
 	return copyConfig

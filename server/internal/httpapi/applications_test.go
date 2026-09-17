@@ -14,7 +14,7 @@ import (
 	"github.com/thekfjie/cmcc-notify/server/internal/config"
 )
 
-func TestApplicationNotifyUsesScopedRecipientAndRateLimit(t *testing.T) {
+func TestApplicationNotifyUsesScopedChannelAndRateLimit(t *testing.T) {
 	const token = "cn_app_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG"
 	frames := make(chan map[string]any, 1)
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
@@ -45,7 +45,7 @@ func TestApplicationNotifyUsesScopedRecipientAndRateLimit(t *testing.T) {
 			ServerURL: "ws" + strings.TrimPrefix(gateway.URL, "http"),
 		}},
 		Applications: []config.Application{{
-			Name: "monitoring", Enabled: true, Account: "primary", To: "13800138000",
+			Name: "monitoring", Enabled: true, Account: "primary",
 			RateLimitPerMinute: 1, TokenHash: config.HashApplicationToken(token), TokenHint: config.ApplicationTokenHint(token),
 		}},
 	}, "test")
@@ -70,7 +70,7 @@ func TestApplicationNotifyUsesScopedRecipientAndRateLimit(t *testing.T) {
 	}
 	select {
 	case frame := <-frames:
-		if frame["to"] != "13800138000" || frame["content"] != "Server Alert\n\nDisk usage is high" {
+		if _, exists := frame["to"]; exists || frame["content"] != "Server Alert\n\nDisk usage is high" {
 			t.Fatalf("frame = %#v", frame)
 		}
 	case <-time.After(time.Second):
@@ -86,13 +86,13 @@ func TestApplicationNotifyUsesScopedRecipientAndRateLimit(t *testing.T) {
 	}
 }
 
-func TestApplicationNotifyRejectsRecipientOverrideBeforeConnecting(t *testing.T) {
+func TestApplicationNotifyRejectsUnknownTargetFieldBeforeConnecting(t *testing.T) {
 	const token = "cn_app_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG"
 	api, err := New(config.Config{
 		AuthToken: "admin-secret",
 		Accounts:  []config.Account{{Name: "primary", APIKey: "ak_test", Enabled: true}},
 		Applications: []config.Application{{
-			Name: "monitoring", Enabled: true, Account: "primary", To: "13800138000",
+			Name: "monitoring", Enabled: true, Account: "primary",
 			RateLimitPerMinute: 60, TokenHash: config.HashApplicationToken(token), TokenHint: config.ApplicationTokenHint(token),
 		}},
 	}, "test")
@@ -104,7 +104,7 @@ func TestApplicationNotifyRejectsRecipientOverrideBeforeConnecting(t *testing.T)
 	request.Header.Set("Authorization", "Bearer "+token)
 	response := httptest.NewRecorder()
 	api.Handler().ServeHTTP(response, request)
-	if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "recipient override is not allowed") {
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid JSON") {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 	if len(api.clients) != 0 {
@@ -124,7 +124,7 @@ func TestApplicationManagementStoresOnlyTokenHashAndRotates(t *testing.T) {
 	handler := api.Handler()
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/applications", strings.NewReader(`{
-  "name":"monitoring","enabled":false,"account":"primary","to":"13800138000","rate_limit_per_minute":30
+  "name":"monitoring","enabled":false,"account":"primary","rate_limit_per_minute":30
 }`))
 	request.Header.Set("Authorization", "Bearer admin-secret")
 	response := httptest.NewRecorder()

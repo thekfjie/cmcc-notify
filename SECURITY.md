@@ -18,10 +18,9 @@ and replace this paragraph with the final reporting address.
 Standalone notification applications use cryptographically random tokens.
 The WebUI displays a complete token only when the application is created or
 rotated, and the state file stores only its SHA-256 hash and a short hint.
-Applications should remain bound to a fixed account and recipient unless a
-trusted integration genuinely requires recipient override. Pass tokens only
-in the `Authorization` header; query-string tokens are intentionally not
-supported.
+Applications are bound to one fixed CMCC channel or notification group. Pass
+tokens only in the `Authorization` header; query-string tokens and per-request
+target overrides are intentionally not supported.
 
 The Gotify Plugin Configurer stores YAML in the Gotify database. Operators must
 protect the database and backups. The plugin masks keys in status output and

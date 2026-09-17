@@ -50,6 +50,10 @@ func (s *Server) sendMediaUpload(w http.ResponseWriter, r *http.Request) {
 	if r.MultipartForm != nil {
 		defer r.MultipartForm.RemoveAll()
 	}
+	if strings.TrimSpace(r.FormValue("to")) != "" {
+		writeError(w, http.StatusBadRequest, "to is not supported; use account or group")
+		return
+	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "file is required")
@@ -60,16 +64,7 @@ func (s *Server) sendMediaUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "file exceeds 200 MiB limit")
 		return
 	}
-	accountName := strings.TrimSpace(r.FormValue("account"))
-	if accountName == "" && len(cfg.Accounts) == 1 {
-		accountName = cfg.Accounts[0].Name
-	}
-	account, ok := cfg.Account(accountName)
-	if !ok || !account.Enabled {
-		writeError(w, http.StatusBadRequest, "unknown or disabled account")
-		return
-	}
-	recipients, groupName, err := resolveRecipients(cfg, account, r.FormValue("to"), r.FormValue("group"))
+	targets, groupName, err := resolveTargets(cfg, r.FormValue("account"), r.FormValue("group"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -110,28 +105,11 @@ func (s *Server) sendMediaUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "file exceeds 200 MiB limit")
 		return
 	}
-	client, err := s.client(account)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Minute)
 	defer cancel()
-	if !client.Connected() {
-		if err := client.Connect(ctx); err != nil {
-			writeError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-	}
-	mediaURL, size, err := client.Upload(ctx, header.Filename, tmpPath, mediaType)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	result, batch, err := sendMediaToRecipients(ctx, client, recipients, groupName, cmcc.MediaMessage{
-		MediaType: mediaType, Content: strings.TrimSpace(r.FormValue("caption")), MediaURL: mediaURL,
-		MediaFileName: header.Filename, MediaSize: size, MediaMIMEType: mimeType,
-	})
+	result, batch, mediaURL, size, err := s.uploadAndSendMediaToTargets(
+		ctx, targets, groupName, header.Filename, tmpPath, mediaType, mimeType, strings.TrimSpace(r.FormValue("caption")),
+	)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -148,6 +126,54 @@ func (s *Server) sendMediaUpload(w http.ResponseWriter, r *http.Request) {
 		SendResult: result, MediaType: string(mediaType), FileName: header.Filename,
 		MIMEType: mimeType, Size: size, MediaURL: mediaURL,
 	})
+}
+
+func (s *Server) uploadAndSendMediaToTargets(ctx context.Context, targets []sendTarget, groupName, fileName, filePath string, mediaType cmcc.MediaType, mimeType, caption string) (cmcc.SendResult, *batchSendResponse, string, int64, error) {
+	if groupName == "" {
+		client, err := s.connectedClient(ctx, targets[0].Account)
+		if err != nil {
+			return cmcc.SendResult{}, nil, "", 0, err
+		}
+		mediaURL, size, err := client.Upload(ctx, fileName, filePath, mediaType)
+		if err != nil {
+			return cmcc.SendResult{}, nil, "", 0, err
+		}
+		result, err := sendMediaWithCompanionText(ctx, client, caption, cmcc.MediaMessage{
+			MediaType: mediaType, MediaURL: mediaURL,
+			MediaFileName: fileName, MediaSize: size, MediaMIMEType: mimeType,
+		})
+		return result, nil, mediaURL, size, err
+	}
+
+	response := &batchSendResponse{Mode: "channel_fanout", Group: groupName, Total: len(targets)}
+	var firstMediaURL string
+	var uploadedSize int64
+	for _, target := range targets {
+		item := channelSendResult{Channel: target.Account.Name}
+		client, err := s.connectedClient(ctx, target.Account)
+		if err == nil {
+			var mediaURL string
+			var size int64
+			mediaURL, size, err = client.Upload(ctx, fileName, filePath, mediaType)
+			if firstMediaURL == "" && mediaURL != "" {
+				firstMediaURL, uploadedSize = mediaURL, size
+			}
+			if err == nil {
+				item.SendResult, err = sendMediaWithCompanionText(ctx, client, caption, cmcc.MediaMessage{
+					MediaType: mediaType, MediaURL: mediaURL,
+					MediaFileName: fileName, MediaSize: size, MediaMIMEType: mimeType,
+				})
+			}
+		}
+		if err != nil {
+			item.Error = err.Error()
+			response.FailedCount++
+		} else {
+			response.AcceptedCount++
+		}
+		response.Results = append(response.Results, item)
+	}
+	return cmcc.SendResult{}, response, firstMediaURL, uploadedSize, nil
 }
 
 func requestedMediaType(value, mimeType string) (cmcc.MediaType, error) {

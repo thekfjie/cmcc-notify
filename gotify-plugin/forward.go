@@ -21,8 +21,6 @@ type gotifyMessage struct {
 }
 
 type mediaExtra struct {
-	To           string `json:"to"`
-	Phone        string `json:"phone"`
 	Type         string `json:"type"`
 	URL          string `json:"url"`
 	MediaURL     string `json:"media_url"`
@@ -116,14 +114,8 @@ func (p *GotifyPlugin) forwardToAccount(ctx context.Context, msg gotifyMessage, 
 		if mediaURL == "" {
 			return fmt.Errorf("account %q: media extra has no URL", accountName)
 		}
-		to := firstNonEmpty(extra.To, extra.Phone, accountCfg.DefaultTo, cfgDefaultTo(cfg))
-		if strings.TrimSpace(to) == "" {
-			return fmt.Errorf("account %q has no default_to; media forwarding requires a recipient", accountName)
-		}
-		_, err := client.SendMedia(ctx, cmcc.MediaMessage{
-			To:            to,
+		_, err := sendMediaWithCompanionText(ctx, client, firstNonEmpty(extra.Caption, msg.Message), cmcc.MediaMessage{
 			MediaType:     parseMediaType(extra.Type, extra.MIMEType),
-			Content:       firstNonEmpty(extra.Caption, msg.Message),
 			MediaURL:      mediaURL,
 			ThumbnailURL:  extra.ThumbnailURL,
 			MediaFileName: extra.FileName,
@@ -135,23 +127,26 @@ func (p *GotifyPlugin) forwardToAccount(ctx context.Context, msg gotifyMessage, 
 		p.recordSuccess()
 		return nil
 	}
-	to := accountCfg.DefaultTo
-	if to == "" {
-		to = cfgDefaultTo(cfg)
-	}
-	if strings.TrimSpace(to) == "" {
-		return fmt.Errorf("account %q has no default_to; text forwarding requires a recipient", accountName)
-	}
 	text := msg.Message
 	if cfg.IncludeTitle && msg.Title != "" {
 		text = msg.Title + cfg.TitleSeparator + text
 	}
-	_, err := client.SendText(ctx, to, text)
+	_, err := client.SendText(ctx, "", text)
 	if err != nil {
 		return err
 	}
 	p.recordSuccess()
 	return nil
+}
+
+func sendMediaWithCompanionText(ctx context.Context, client *cmcc.Client, companionText string, message cmcc.MediaMessage) (cmcc.SendResult, error) {
+	if companionText = strings.TrimSpace(companionText); companionText != "" {
+		if _, err := client.SendText(ctx, "", companionText); err != nil {
+			return cmcc.SendResult{}, err
+		}
+	}
+	message.Content = ""
+	return client.SendMedia(ctx, message)
 }
 
 func findAccount(cfg *Config, name string) (AccountConfig, bool) {
@@ -161,15 +156,6 @@ func findAccount(cfg *Config, name string) (AccountConfig, bool) {
 		}
 	}
 	return AccountConfig{}, false
-}
-
-func cfgDefaultTo(cfg *Config) string {
-	for _, account := range cfg.Accounts {
-		if account.DefaultTo != "" {
-			return account.DefaultTo
-		}
-	}
-	return ""
 }
 
 func extractMedia(extras map[string]interface{}) (mediaExtra, bool) {

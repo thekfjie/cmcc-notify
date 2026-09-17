@@ -1,73 +1,92 @@
 # Architecture
 
+CMCC Notify is a three-module Go monorepo with one shared protocol layer and
+two independently released products.
+
 ```text
-cmcc-notify/
-├── cmcc/                         shared CMCC SDK
-├── gotify-plugin/                independent Gotify Go Plugin
-├── server/                       independent standalone HTTP service
-├── integrations/                 optional clients and reference adapters
-├── deployments/                  product-specific deployment material
-├── docs/                         protocol and architecture notes
-└── .github/workflows/            test and release workflows
+                         ┌─────────────────────┐
+Gotify messages ────────>│ Gotify Plugin       │
+                         └──────────┬──────────┘
+                                    │
+Applications / WebUI ───>┌──────────▼──────────┐
+                         │ Standalone Server   │
+                         └──────────┬──────────┘
+                                    │
+                         ┌──────────▼──────────┐
+                         │ cmcc/ Go SDK        │
+                         └──────────┬──────────┘
+                                    │
+                         China Mobile gateway
 ```
 
-## Shared boundary
+## Module boundaries
 
-`cmcc/` owns only the CMCC protocol: WebSocket authentication, connection
-state, heartbeat, reconnect loop, text/media frames, and multipart upload. It
-does not know about Gotify users or HTTP API authentication.
+### `cmcc/`
 
-## Gotify product
+Owns WebSocket authentication, connection state, heartbeat, reconnection,
+outbound text/media frames, multipart upload and protocol errors. It contains
+no Gotify, HTTP management or application-routing policy.
 
-`gotify-plugin/` is compiled as a Go Plugin and loaded by Gotify 3.x. Each
-Gotify user gets an isolated plugin instance. The instance connects to that
-user's Gotify `/stream` using a dedicated client token, filters by application
-and priority, then forwards to configured CMCC channels (stored under the
-compatibility configuration key `accounts`). Its custom webhook is
-for direct sends and is protected by Gotify's plugin token path. Configuration
-and status stay inside Gotify's native plugin detail page through the official
-Configurer and Displayer capabilities; the plugin does not embed the
-Standalone Server's separate React control panel.
+### `gotify-plugin/`
 
-## Standalone product
+Runs inside Gotify as a native Go Plugin. Each plugin instance consumes the
+user's Gotify stream through a dedicated client token, applies Application ID
+and priority filters, and forwards matching messages to one or more configured
+CMCC channels. Configuration and status use Gotify's standard plugin page.
 
-`server/` exposes health, authenticated management/test endpoints and an
-application-scoped `POST /v1/notify` production endpoint. Each notification
-application binds an independent token to one CMCC channel and a fixed `to`
-target or local number group. A local number group is expanded by the server
-into N one-to-one gateway frames; it is not a native CMCC broadcast. Tokens
-are generated with cryptographic randomness,
-shown once, persisted only as SHA-256 hashes, independently rate-limited and
-revocable without changing the administrator credential or CMCC API key.
+### `server/`
 
-The responsive React WebUI is compiled to static assets and embedded in the
-same Go binary, so standalone deployments do not need a separate frontend
-service. It is primarily a management and connectivity-test console. The
-browser uses the configured administrator bearer token and receives only
-redacted account fields. CMCC API keys and the administrator token are loaded
-from environment variables or secret files referenced by YAML, keeping
-credentials out of examples and version control.
+Runs as an independent HTTP service. It embeds the React WebUI and provides:
 
-The current release deliberately has no generic Recipient entity. Groups store
-target strings rather than recipient IDs, and every send selects exactly one
-CMCC channel. See [`concepts.md`](concepts.md) for the terminology boundary and
-the possible future multi-channel recipient model.
+- administrator-authenticated status and management endpoints;
+- direct text and media test endpoints;
+- scoped notification applications and one-time application tokens;
+- notification groups composed of multiple CMCC channels;
+- per-application in-process rate limiting.
 
-## Optional integration boundary
+## Standalone data relationships
 
-`integrations/` contains optional examples that consume the Standalone
-Server's public application API. They do not add a product, Go module, daemon
-or server-side special case. The Codex example may translate lifecycle event
-JSON into a normal `POST /v1/notify` request, but the server sees only an
-ordinary notification application and remains unaware of Codex.
+```text
+CMCC channel
+├── name
+├── optional note
+├── Channel API Key
+└── connection settings
 
-The reference sender is intentionally replaceable: users may customize its
-event mapping, invoke it as a generic one-shot command, or call `/v1/notify`
-directly. Integration credentials are ordinary Application Tokens and must not
-be confused with the administrator token or a CMCC Channel API Key.
+Notification group ──> CMCC channel names[]
 
-## Compatibility
+Notification application
+├── token hash
+├── one CMCC channel OR one notification group
+└── per-minute request limit
+```
 
-The checked-in deployment targets Gotify 3.1.1 on Linux ARM64. The plugin must
-be built with Gotify's matching Go build image and dependency graph; a plugin
-binary is not treated as universally compatible across arbitrary Gotify builds.
+Normal sends omit a recipient value and rely on the Channel API Key's bound
+user. A notification-group request is expanded into one independent send per
+channel. This fan-out is implemented by CMCC Notify and returns per-channel
+results.
+
+## Credential boundaries
+
+- The administrator token protects the WebUI and management/test API.
+- Application tokens protect `POST /v1/notify` and are stored only as hashes.
+- CMCC Channel API Keys authenticate gateway connections and uploads.
+- Gotify client tokens are used only by the plugin to consume `/stream`.
+
+These credentials are not interchangeable. Runtime secret files or
+environment variables are preferred over inline YAML.
+
+## Frontend packaging
+
+The Standalone React application is compiled into `server/internal/httpapi/web`
+and embedded in the Go binary. A deployment therefore needs only one server
+process and no separate frontend service.
+
+## Release boundaries
+
+- `cmcc/vX.Y.Z` releases the SDK module;
+- `gotify-plugin/vX.Y.Z` releases version-specific plugin artifacts;
+- `server/vX.Y.Z` releases Standalone binaries and container images.
+
+The root `go.work` is used only for local development. CI verifies each module
+with `GOWORK=off`.

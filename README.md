@@ -1,54 +1,61 @@
 # CMCC Notify
 
-CMCC Notify is an open-source integration for China Mobile New Message. One
-repository ships two products on top of one shared CMCC protocol library.
+[简体中文](README.md) | [English](README.en.md)
 
-> 中文：本项目在同一个 monorepo 中维护 Gotify 插件和独立推送服务，二者
-> 共享 `cmcc/` 协议实现，避免重复维护。
+CMCC Notify 是一个面向中国移动新消息能力的开源通知网关。本仓库以一个
+monorepo 同时维护两个产品，并共享同一套 Go SDK：
 
-## Choose a product
-
-| You are… | Use | Directory |
+| 使用场景 | 产品 | 文档 |
 | --- | --- | --- |
-| Already using Gotify | **Gotify Plugin** — forward selected Gotify messages to CMCC | [`gotify-plugin/`](gotify-plugin/) |
-| Looking for a standalone deployment | **Standalone Server** — application tokens, notification REST API, management WebUI and Docker deployment | [`server/`](server/) |
+| 已经部署 Gotify | Gotify Plugin：将 Gotify 消息转发到 CMCC | [gotify-plugin/](gotify-plugin/) |
+| 需要独立通知服务 | Standalone Server：提供 WebUI、REST API、应用 Token 与 Docker 部署 | [server/](server/) |
 
-Standalone 的开通、CMCC 通道、本地号码组、应用级通知 API 以及单目标/本地扇出文字与多媒体发送，请直接查看
-[`server/README.md`](server/README.md)。相同说明也内置在 WebUI 的“API 文档 → 使用指南”中。
+## 主要能力
 
-Both products use [`cmcc/`](cmcc/), which owns only CMCC authentication,
-WebSocket transport, text and rich-media frames, uploads, protocol errors and
-connection management. It contains no Gotify or standalone-server policy.
+- 多个 CMCC 通道，每个通道保存一份 Channel API Key 与可选备注；
+- 文字消息、图片和文件上传发送；
+- 通知组：一次请求向组内多个 CMCC 通道分别发送；
+- 通知应用：为监控、脚本、NAS、CI/CD 或 Agent 分配独立 Token；
+- WebSocket 认证、心跳、自动重连、上传和结构化错误处理；
+- AMD64/ARM64 二进制、Docker 镜像与独立产品 Release。
 
-## Repository layout
+一个 CMCC 通道对应一份 Channel API Key，消息默认投递给该 Key 绑定的用户。
+通知组保存的是多个通道名称，组发送
+会产生多次独立提交，并返回逐通道结果。
+
+## 仓库结构
 
 ```text
 cmcc-notify/
-├── cmcc/                  shared CMCC Go SDK (independent module)
-├── gotify-plugin/         complete Gotify Plugin project (independent module)
-├── server/                complete Standalone Server (independent module)
-├── integrations/          optional examples built on the public REST API
-├── deployments/           deployment examples for both products
-├── docs/                  architecture and audited protocol notes
-├── .github/workflows/     product-specific test and release pipelines
-└── go.work                local multi-module development only
+├── cmcc/                  共享 CMCC Go SDK（独立 Go Module）
+├── gotify-plugin/         Gotify Plugin（独立 Go Module）
+├── server/                Standalone Server（独立 Go Module）
+├── integrations/          可选集成示例
+├── deployments/           部署示例
+├── docs/                  架构与协议说明
+├── .github/workflows/     独立测试、构建与发布流程
+└── go.work                本地联合开发配置
 ```
 
-The three directories have separate `go.mod` files. Server-only dependencies
-do not enter the Gotify Plugin module graph. `go.work` is a developer
-convenience and is not required by released binaries.
+三个模块可以在 `GOWORK=off` 下独立构建。Standalone Server 的 Web、存储等依赖
+不会进入 Gotify Plugin 的依赖图。
 
-## Optional integrations
+## 快速开始
 
-Optional adapters live under [`integrations/`](integrations/). They are not
-additional server products and are never required to use the REST API. The
-Codex example provides a user-customizable lifecycle-hook adapter and a generic
-one-shot sender while keeping `POST /v1/notify` as the only integration
-contract. Users may instead call that endpoint directly from their own scripts.
+- Standalone Server：[中文文档](server/README.md) · [English](server/README.en.md)
+- Gotify Plugin：[中文文档](gotify-plugin/README.md) · [English](gotify-plugin/README.en.md)
+- Go SDK：[cmcc/README.md](cmcc/README.md)
+- 系统架构：[docs/architecture.md](docs/architecture.md)
+- 协议说明：[docs/cmcc-protocol.md](docs/cmcc-protocol.md)
 
-See [`integrations/codex/`](integrations/codex/) for the optional Codex example.
+## 内容展示说明
 
-## Development
+2026 年 9 月 17 日真实终端测试结果：文字按纯文本展示，保留换行，客户端会
+自动识别 URL，并支持 Unicode 与 Emoji。Markdown、HTML、表格和代码块可以作为
+普通字符串发送，但不会被格式化渲染。图片和文件已验证可通过“先上传、后发送”
+的流程投递。
+
+## 开发
 
 ```bash
 make test
@@ -57,71 +64,26 @@ make build-server
 make build-plugin
 ```
 
-Each product can also be checked from its own directory:
+也可以分别验证三个模块：
 
 ```bash
-cd gotify-plugin && make test
+cd cmcc && GOWORK=off go test ./...
+cd ../gotify-plugin && GOWORK=off go test ./...
 cd ../server && GOWORK=off go test ./...
 ```
 
-## Versioning and releases
+## 版本与发布
 
-The products are versioned independently:
+- `cmcc/vX.Y.Z`：共享 Go SDK；
+- `gotify-plugin/vX.Y.Z`：Gotify 插件产物；
+- `server/vX.Y.Z`：Standalone 二进制与多架构容器镜像。
 
-- `cmcc/vX.Y.Z` — shared Go SDK module;
-- `gotify-plugin/vX.Y.Z` — Gotify Plugin binaries;
-- `server/vX.Y.Z` — Standalone Server binaries and multi-architecture GHCR
-  images.
+Gotify Go Plugin 产物与目标 Gotify 版本、Go 版本和架构相关，不能假定跨版本兼容。
 
-Gotify Plugin artifacts include the target Gotify version and architecture in
-their filename. Standalone Server and Gotify Plugin binary releases also
-publish adjacent `.sha256` files. A Go Plugin binary is not assumed compatible
-with arbitrary Gotify builds.
+## 安全
 
-## Security
-
-Never commit CMCC API keys, Gotify client tokens, Standalone administrator
-tokens or application tokens.
-Examples use environment-variable references. See [`SECURITY.md`](SECURITY.md)
-for reporting vulnerabilities and credential-handling guidance.
-
-## Protocol status
-
-China Mobile's public channel guide is
-[`channel-guide.md`](https://5gvas01.cmicmaap.com/aifile/public/file/channel-guide.md).
-It states that the China Mobile New Message channel supports text and
-rich-media messages. The initial wire-format implementation was also informed
-by a static audit of a CMCC-distributed channel reference implementation on
-2026-09-16. CMCC Notify does not depend on or deploy OpenClaw: its two products
-are the Gotify Plugin and the Standalone Server.
-
-On 2026-09-16, recipient-addressed rich-media delivery was verified end to end
-with both a PNG image and a ZIP file. The successful frame includes `to`,
-`mediaType`, `mediaUrl`, file metadata and a message ID; the gateway returned
-`media_processed`, and both payloads reached the target China Mobile New
-Message client. Text and rich media therefore share the same explicit
-recipient-routing model in CMCC Notify. The protocol still does not expose a
-reliable delivery/read receipt, so the API reports `accepted` separately from
-`acknowledged`.
-
-See [`docs/cmcc-protocol.md`](docs/cmcc-protocol.md) for the known wire format
-and limitations.
-
-## Concepts and local fan-out
-
-CMCC Notify uses a **CMCC channel** to mean one configured Channel API Key and
-uses `to` as the observed recipient-routing field. A **local number group** is
-only a stored list of `to` targets: sending to it produces N one-to-one frames
-through the selected channel. It is not a native CMCC group, broadcast API or
-chat room.
-
-The exact Chinese terminology, evidence levels and current/future data models
-are documented in [`docs/concepts.md`](docs/concepts.md).
-
-## Source repository
-
-The canonical repository is `github.com/thekfjie/cmcc-notify`. The three Go
-modules use paths below that namespace and remain independently buildable.
+不要将 CMCC API Key、Gotify Client Token、Standalone 管理令牌或应用 Token
+提交到源码、镜像或日志。详细说明见 [SECURITY.md](SECURITY.md)。
 
 ## License
 

@@ -220,7 +220,6 @@ func (p *GotifyPlugin) RegisterWebhook(basePath string, mux *gin.RouterGroup) {
 
 type sendRequest struct {
 	Account string `json:"account"`
-	To      string `json:"to"`
 	Text    string `json:"text"`
 	Media   *struct {
 		Type         string `json:"type"`
@@ -247,13 +246,6 @@ func (p *GotifyPlugin) handleSend(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown account"})
 		return
 	}
-	if strings.TrimSpace(request.To) == "" {
-		request.To = accountCfg.DefaultTo
-	}
-	if strings.TrimSpace(request.To) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "recipient is required"})
-		return
-	}
 	account := p.clientFor(accountCfg)
 	if account == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "account is unavailable"})
@@ -268,10 +260,9 @@ func (p *GotifyPlugin) handleSend(c *gin.Context) {
 		}
 	}
 	if request.Media != nil {
-		result, err := account.SendMedia(ctx, cmcc.MediaMessage{
-			To:        request.To,
-			MediaType: parseMediaType(request.Media.Type, request.Media.MIMEType), Content: request.Media.Caption,
-			MediaURL: request.Media.URL, MediaFileName: request.Media.FileName, MediaMIMEType: request.Media.MIMEType,
+		result, err := sendMediaWithCompanionText(ctx, account, request.Media.Caption, cmcc.MediaMessage{
+			MediaType: parseMediaType(request.Media.Type, request.Media.MIMEType),
+			MediaURL:  request.Media.URL, MediaFileName: request.Media.FileName, MediaMIMEType: request.Media.MIMEType,
 			ThumbnailURL: request.Media.ThumbnailURL,
 		})
 		if err != nil {
@@ -281,7 +272,7 @@ func (p *GotifyPlugin) handleSend(c *gin.Context) {
 		c.JSON(http.StatusAccepted, result)
 		return
 	}
-	result, err := account.SendText(ctx, request.To, request.Text)
+	result, err := account.SendText(ctx, "", request.Text)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -346,16 +337,16 @@ func (p *GotifyPlugin) GetDisplay(_ *url.URL) string {
 	if len(cfg.Accounts) == 0 {
 		lines = append(lines, "尚未配置 CMCC 通道。")
 	} else {
-		lines = append(lines, "| 通道 | 配置 | 连接 | Channel API Key | 默认 to 目标 |", "| --- | --- | --- | --- | --- |")
+		lines = append(lines, "| 通道 | 备注 | 配置 | 连接 | Channel API Key |", "| --- | --- | --- | --- | --- |")
 		for _, account := range cfg.Accounts {
 			client := p.clientFor(account)
 			lines = append(lines, fmt.Sprintf(
-				"| %s | %s | %s | `%s` | `%s` |",
+				"| %s | %s | %s | %s | `%s` |",
 				markdownCell(account.Name),
+				markdownCell(account.Note),
 				enabledLabel(account.Enabled),
 				connectedLabel(account.Enabled && client != nil && client.Connected()),
 				markdownCell(maskKey(account.APIKey)),
-				markdownCell(maskRecipient(account.DefaultTo)),
 			))
 		}
 	}
@@ -381,7 +372,7 @@ func (p *GotifyPlugin) GetDisplay(_ *url.URL) string {
 		"",
 		"- 配置内容由 Gotify 的统一 **Configurer** 面板保存。",
 		"- YAML/API 为兼容性仍使用 `accounts` 和 `account` 字段；界面中的“通道”就是一份 Channel API Key 配置。",
-		"- 文字转发需要通道设置 `default_to`；直接 API 请求也可以提供 `to`。`to` 是实际路由目标，不是备注。",
+		"- 每个 Channel API Key 默认向其绑定用户发送消息。",
 		"- 一条 Gotify 消息命中多个通道时，插件会对各通道分别发送；这属于插件侧扇出，不是 CMCC 原生广播或群聊。",
 		"- HTTP `202 Accepted` 仅表示消息已写入 CMCC 网关，不表示送达或已读。",
 	)
@@ -487,17 +478,6 @@ func maskKey(key string) string {
 		return "***"
 	}
 	return key[:3] + "***" + key[len(key)-3:]
-}
-
-func maskRecipient(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	if len(value) <= 7 {
-		return "***"
-	}
-	return value[:3] + "****" + value[len(value)-4:]
 }
 
 func backoff(attempt int) time.Duration {

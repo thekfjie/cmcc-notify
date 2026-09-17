@@ -25,32 +25,26 @@ var (
 )
 
 type applicationSetting struct {
-	Name                   string `json:"name"`
-	Enabled                bool   `json:"enabled"`
-	Account                string `json:"account"`
-	To                     string `json:"to,omitempty"`
-	Group                  string `json:"group,omitempty"`
-	AllowRecipientOverride bool   `json:"allow_recipient_override"`
-	RateLimitPerMinute     int    `json:"rate_limit_per_minute"`
-	TokenHint              string `json:"token_hint"`
+	Name               string `json:"name"`
+	Enabled            bool   `json:"enabled"`
+	Account            string `json:"account,omitempty"`
+	Group              string `json:"group,omitempty"`
+	RateLimitPerMinute int    `json:"rate_limit_per_minute"`
+	TokenHint          string `json:"token_hint"`
 }
 
 type applicationMutation struct {
-	Name                   string `json:"name"`
-	Enabled                bool   `json:"enabled"`
-	Account                string `json:"account"`
-	To                     string `json:"to"`
-	Group                  string `json:"group"`
-	AllowRecipientOverride bool   `json:"allow_recipient_override"`
-	RateLimitPerMinute     int    `json:"rate_limit_per_minute"`
+	Name               string `json:"name"`
+	Enabled            bool   `json:"enabled"`
+	Account            string `json:"account"`
+	Group              string `json:"group"`
+	RateLimitPerMinute int    `json:"rate_limit_per_minute"`
 }
 
 type notifyRequest struct {
 	Title   string `json:"title"`
 	Message string `json:"message"`
 	Text    string `json:"text"`
-	To      string `json:"to"`
-	Group   string `json:"group"`
 }
 
 type notifyResponse struct {
@@ -169,9 +163,7 @@ func (s *Server) application(w http.ResponseWriter, r *http.Request) {
 				application := &next.Applications[i]
 				application.Enabled = request.Enabled
 				application.Account = strings.TrimSpace(request.Account)
-				application.To = strings.TrimSpace(request.To)
 				application.Group = strings.TrimSpace(request.Group)
-				application.AllowRecipientOverride = request.AllowRecipientOverride
 				application.RateLimitPerMinute = request.RateLimitPerMinute
 				return nil
 			}
@@ -233,40 +225,14 @@ func (s *Server) notify(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	to := strings.TrimSpace(request.To)
-	groupName := strings.TrimSpace(request.Group)
-	if (to != "" || groupName != "") && !application.AllowRecipientOverride {
-		writeError(w, http.StatusForbidden, "recipient override is not allowed")
-		return
-	}
-	if to == "" && groupName == "" {
-		to = application.To
-		groupName = application.Group
-	}
-	account, ok := cfg.Account(application.Account)
-	if !ok || !account.Enabled {
-		writeError(w, http.StatusServiceUnavailable, "application account is unavailable")
-		return
-	}
-	recipients, resolvedGroup, err := resolveRecipients(cfg, account, to, groupName)
+	targets, resolvedGroup, err := resolveTargets(cfg, application.Account, application.Group)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	client, err := s.client(account)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if !client.Connected() {
-		if err := client.Connect(ctx); err != nil {
-			writeError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-	}
-	result, batch, err := sendTextToRecipients(ctx, client, recipients, resolvedGroup, text)
+	result, batch, err := s.sendTextToTargets(ctx, targets, resolvedGroup, text)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -285,9 +251,9 @@ func (s *Server) notify(w http.ResponseWriter, r *http.Request) {
 func applicationFromMutation(request applicationMutation, token string) config.Application {
 	return config.Application{
 		Name: strings.TrimSpace(request.Name), Enabled: request.Enabled,
-		Account: strings.TrimSpace(request.Account), To: strings.TrimSpace(request.To), Group: strings.TrimSpace(request.Group),
-		AllowRecipientOverride: request.AllowRecipientOverride, RateLimitPerMinute: request.RateLimitPerMinute,
-		TokenHash: config.HashApplicationToken(token), TokenHint: config.ApplicationTokenHint(token),
+		Account: strings.TrimSpace(request.Account), Group: strings.TrimSpace(request.Group),
+		RateLimitPerMinute: request.RateLimitPerMinute,
+		TokenHash:          config.HashApplicationToken(token), TokenHint: config.ApplicationTokenHint(token),
 	}
 }
 

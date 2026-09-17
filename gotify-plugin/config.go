@@ -10,9 +10,9 @@ import (
 
 type AccountConfig struct {
 	Name      string `yaml:"name"`
+	Note      string `yaml:"note,omitempty"`
 	APIKey    string `yaml:"api_key"`
 	Enabled   bool   `yaml:"enabled"`
-	DefaultTo string `yaml:"default_to"`
 	UploadURL string `yaml:"upload_url"`
 }
 
@@ -57,6 +57,11 @@ func validateConfig(c *Config) error {
 	names := make(map[string]struct{}, len(c.Accounts))
 	for i := range c.Accounts {
 		a := &c.Accounts[i]
+		a.Name = strings.TrimSpace(a.Name)
+		a.Note = strings.TrimSpace(a.Note)
+		if len(a.Note) > 500 {
+			return fmt.Errorf("account %q note is too long", a.Name)
+		}
 		if a.Name == "" {
 			a.Name = fmt.Sprintf("account-%d", i+1)
 		}

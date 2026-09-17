@@ -38,8 +38,7 @@ and exits successfully even when notification delivery fails.
 ## 1. Create an ordinary notification application
 
 In the Standalone WebUI, open **账户状态 → 通知应用 → 新建应用**. Choose the
-CMCC channel and fixed number or local number group that should receive Codex
-notifications. Keep recipient override disabled unless it is genuinely needed.
+CMCC channel or notification group that should receive Codex notifications.
 
 The application can be named `codex`, `development`, or anything else. Save the
 one-time `cn_app_...` Application Token. Do not use the administrator token or a
