@@ -23,6 +23,15 @@ monorepo 同时维护两个产品，并共享同一套 Go SDK：
 通知组保存的是多个通道名称，组发送
 会产生多次独立提交，并返回逐通道结果。
 
+## 获取 Channel API Key
+
+1. [开启手机新消息底层开关](https://mp.weixin.qq.com/s/sWdK7mbKnLOdZmXXOMjAYA)：用于确认手机系统已启用新消息基础能力；
+2. [开启新消息业务](https://rcs.10086.cn/i/#/?RPwXWk9k0yk)：使用需要接收通知的中国移动号码扫码或打开页面完成业务开通；
+3. 进入“新消息ClawBot”应用号，点击下方菜单栏“绑定/解绑-立即授权”，完成认证后获取专属 API Key。
+
+Standalone WebUI 的 Channel API Key 输入框既可以粘贴纯 `ak_...`，也可以直接
+粘贴 ClawBot 返回的整段授权短信；前后端都会只提取并保存其中的 API Key。
+
 ## 仓库结构
 
 ```text

@@ -23,6 +23,16 @@ A CMCC channel represents one Channel API Key, and messages are delivered to
 the user bound to that key. A notification group stores channel names and returns a per-channel
 result for each fan-out request.
 
+## Obtain a Channel API Key
+
+1. [Enable the phone-level New Message switch](https://mp.weixin.qq.com/s/sWdK7mbKnLOdZmXXOMjAYA) to turn on the underlying device capability.
+2. [Activate the New Message service](https://rcs.10086.cn/i/#/?RPwXWk9k0yk) with the China Mobile number that should receive notifications.
+3. Open the New Message ClawBot service account, choose **Bind/Unbind → Authorize now**, and complete authentication to obtain the dedicated API Key.
+
+The Standalone WebUI accepts either a bare `ak_...` value or the complete
+ClawBot authorization message. Both frontend and backend retain only the
+extracted API Key.
+
 ## Repository layout
 
 ```text

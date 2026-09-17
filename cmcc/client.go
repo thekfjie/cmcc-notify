@@ -93,6 +93,7 @@ type Client struct {
 }
 
 func NewClient(apiKey string, cfg Config) (*Client, error) {
+	apiKey = NormalizeAPIKey(apiKey)
 	if !ValidAPIKey(apiKey) {
 		return nil, ErrInvalidAPIKey
 	}
@@ -103,10 +104,6 @@ func NewClient(apiKey string, cfg Config) (*Client, error) {
 		events: make(chan Event, 32),
 		closed: make(chan struct{}),
 	}, nil
-}
-
-func ValidAPIKey(key string) bool {
-	return strings.HasPrefix(key, "ak_") || strings.HasPrefix(key, "app_")
 }
 
 func (c *Client) Events() <-chan Event { return c.events }

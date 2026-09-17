@@ -6,6 +6,16 @@
 新消息。插件使用 Gotify 自带的配置编辑器和插件详情页，不嵌入 Standalone
 Server 的 WebUI。
 
+## 获取 Channel API Key
+
+1. [开启手机新消息底层开关](https://mp.weixin.qq.com/s/sWdK7mbKnLOdZmXXOMjAYA)；
+2. [开启新消息业务](https://rcs.10086.cn/i/#/?RPwXWk9k0yk)，为实际接收通知的中国移动号码完成开通；
+3. 进入“新消息ClawBot”应用号，点击“绑定/解绑-立即授权”，完成认证后获取专属 API Key。
+
+Gotify 配置中的 `accounts[].api_key` 可以填写纯 `ak_...`，也可以直接粘贴
+ClawBot 返回的整段授权短信。插件校验配置时只保留提取出的 Key，不记录其余短信
+内容。
+
 ## 构建与测试
 
 ```bash

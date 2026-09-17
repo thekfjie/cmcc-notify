@@ -21,7 +21,9 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	handler := api.Handler()
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/accounts", strings.NewReader(`{
-  "name":"backup","note":"备用通知通道","api_key":"ak_backup","enabled":false
+  "name":"backup","note":"备用通知通道",
+  "api_key":"【新消息Claw】请根据 https://example.invalid/channel-guide.md 安装插件。我的新消息Channel API Key为ak_backup",
+  "enabled":false
 }`))
 	request.Header.Set("Authorization", "Bearer secret")
 	response := httptest.NewRecorder()
@@ -55,6 +57,13 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	}
 	if len(state.Accounts) != 2 || state.Accounts[0].Name != "backup" || state.Accounts[0].Note != "备用通知通道" || state.Accounts[0].APIKey != "ak_backup" {
 		t.Fatalf("persisted accounts = %#v", state.Accounts)
+	}
+	stateBytes, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stateBytes), "新消息Claw") || strings.Contains(string(stateBytes), "channel-guide.md") {
+		t.Fatal("authorization message text was persisted instead of the normalized API key")
 	}
 	if len(state.Groups) != 1 || len(state.Groups[0].Channels) != 2 {
 		t.Fatalf("persisted groups = %#v", state.Groups)
@@ -107,6 +116,27 @@ func TestManageAccountsAndGroupsPersistsState(t *testing.T) {
 	}
 	if state.Accounts[0].Name != "primary" || state.Accounts[0].APIKey != "ak_backup" || state.Groups[0].Channels[0] != "primary" || state.Applications[0].Group != "family" {
 		t.Fatalf("persisted rename = %#v", state)
+	}
+}
+
+func TestAccountMutationRejectsInvalidAuthorizationTextWithoutEchoingIt(t *testing.T) {
+	api, err := New(config.Config{AuthToken: "secret", StateFile: filepath.Join(t.TempDir(), "state.yaml")}, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer api.Close()
+	const invalid = "【新消息Claw】授权完成，但消息中没有可用密钥"
+	request := httptest.NewRequest(http.MethodPost, "/v1/accounts", strings.NewReader(`{
+  "name":"invalid","api_key":"`+invalid+`","enabled":true
+}`))
+	request.Header.Set("Authorization", "Bearer secret")
+	response := httptest.NewRecorder()
+	api.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid api_key") {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), invalid) {
+		t.Fatal("invalid authorization text was echoed in the response")
 	}
 }
 

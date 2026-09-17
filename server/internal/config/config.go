@@ -124,6 +124,7 @@ func (c *Config) ResolveAndValidate() error {
 				return fmt.Errorf("read account %q API key: %w", a.Name, err)
 			}
 		}
+		a.APIKey = cmcc.NormalizeAPIKey(a.APIKey)
 		if a.Enabled && !cmcc.ValidAPIKey(a.APIKey) {
 			return fmt.Errorf("account %q has invalid or missing API key", a.Name)
 		}

@@ -157,7 +157,7 @@ func TestValidAPIKey(t *testing.T) {
 		key string
 		ok  bool
 	}{
-		{"ak_x", true}, {"app_x", true}, {"token", false}, {"", false},
+		{"ak_x", true}, {"app_x", true}, {"ak_", false}, {"token", false}, {"", false},
 	} {
 		if got := ValidAPIKey(tc.key); got != tc.ok {
 			t.Errorf("ValidAPIKey(%q) = %v, want %v", tc.key, got, tc.ok)

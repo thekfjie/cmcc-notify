@@ -23,6 +23,27 @@ func TestValidateConfig(t *testing.T) {
 	}
 }
 
+func TestValidateConfigExtractsAPIKeyFromAuthorizationMessage(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Accounts = []AccountConfig{{
+		Name: "primary", APIKey: "【新消息Claw】我的新消息Channel API Key为ak_authorized-key", Enabled: true,
+	}}
+	if err := validateConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Accounts[0].APIKey != "ak_authorized-key" {
+		t.Fatalf("normalized API key = %q", cfg.Accounts[0].APIKey)
+	}
+}
+
+func TestValidateConfigRejectsAuthorizationTextWithoutAPIKey(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Accounts = []AccountConfig{{Name: "primary", APIKey: "授权成功，请复制后续消息", Enabled: true}}
+	if err := validateConfig(cfg); err == nil {
+		t.Fatal("expected invalid API key error")
+	}
+}
+
 func TestDisplayUsesGotifyNativeMarkdownAndRedactsSecrets(t *testing.T) {
 	plugin := &GotifyPlugin{
 		config: &Config{
@@ -50,6 +71,8 @@ func TestDisplayUsesGotifyNativeMarkdownAndRedactsSecrets(t *testing.T) {
 		"主通道",
 		"1, 2",
 		"POST /plugin/1/custom/token/send",
+		"开启手机新消息底层开关",
+		"绑定/解绑 → 立即授权",
 	} {
 		if !strings.Contains(display, expected) {
 			t.Fatalf("display does not contain %q:\n%s", expected, display)

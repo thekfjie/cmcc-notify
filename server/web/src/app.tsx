@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText, InputGroupTextarea } from "@/components/ui/input-group"
 import { Select } from "@/components/ui/select"
+import { extractCMCCAPIKey, normalizeCMCCAPIKey } from "@/api-key"
 import { cn } from "@/lib/utils"
 
 type Page = "overview" | "send" | "accounts" | "docs"
@@ -39,7 +40,8 @@ class APIError extends Error {
 
 const sessionTokenKey = "cmcc-notify-token"
 const themeKey = "cmcc-notify-theme"
-const activationURL = "https://rcs.10086.cn/i/#/?RPwXWk9k0yk"
+const newMessageSwitchGuideURL = "https://mp.weixin.qq.com/s/sWdK7mbKnLOdZmXXOMjAYA"
+const newMessageBusinessURL = "https://rcs.10086.cn/i/#/?RPwXWk9k0yk"
 const navigation: Array<{ id: Page; label: string; icon: typeof Activity }> = [
   { id: "overview", label: "概览", icon: Activity },
   { id: "send", label: "发送消息", icon: Send },
@@ -295,16 +297,25 @@ function AccountsPage({ status, settings, token, refreshing, onRefresh, onSettin
 function AccountEditor({ token, existing, onClose, onSaved }: { token: string; existing: AccountSetting | null; onClose: () => void; onSaved: (settings: SettingsResponse, name: string) => void }) {
   const [name, setName] = useState(existing?.name ?? ""); const [apiKey, setAPIKey] = useState(""); const [enabled, setEnabled] = useState(existing?.enabled ?? true)
   const [note, setNote] = useState(existing?.note ?? ""); const [serverURL, setServerURL] = useState(existing?.server_url ?? ""); const [uploadURL, setUploadURL] = useState(existing?.upload_url ?? "")
-  const [saving, setSaving] = useState(false); const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [keyExtracted, setKeyExtracted] = useState(false)
+  const updateAPIKey = (value: string) => {
+    const extracted = extractCMCCAPIKey(value)
+    if (extracted && value.trim() !== extracted) {
+      setAPIKey(extracted); setKeyExtracted(true); return
+    }
+    setAPIKey(value); setKeyExtracted(false)
+  }
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError("")
-    try { const path = existing ? `/v1/accounts/${encodeURIComponent(existing.name)}` : "/v1/accounts"; const next = await apiRequest<SettingsResponse>(path, token, { method: existing ? "PUT" : "POST", body: JSON.stringify({ name: name.trim(), note: note.trim(), api_key: apiKey.trim(), enabled, server_url: serverURL.trim(), upload_url: uploadURL.trim() }) }); onSaved(next, name.trim()) }
+    const normalizedAPIKey = normalizeCMCCAPIKey(apiKey)
+    if (normalizedAPIKey !== apiKey.trim()) { setAPIKey(normalizedAPIKey); setKeyExtracted(true) }
+    try { const path = existing ? `/v1/accounts/${encodeURIComponent(existing.name)}` : "/v1/accounts"; const next = await apiRequest<SettingsResponse>(path, token, { method: existing ? "PUT" : "POST", body: JSON.stringify({ name: name.trim(), note: note.trim(), api_key: normalizedAPIKey, enabled, server_url: serverURL.trim(), upload_url: uploadURL.trim() }) }); onSaved(next, name.trim()) }
     catch (requestError) { setError(humanizeError(requestError)) } finally { setSaving(false) }
   }
   return <Dialog title={existing ? `编辑通道 · ${existing.name}` : "添加 CMCC 通道"} description="一条通道对应一份 Channel API Key；保存后连接会自动重建。" onClose={onClose}><form className="editor-form" onSubmit={submit}>
     <Field label="通道名称" htmlFor="account-name" hint={existing ? "重命名会同步更新关联通知组和应用" : undefined}><InputGroup className="soft-input"><InputGroupAddon><Radio /></InputGroupAddon><InputGroupInput id="account-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：primary" required /></InputGroup></Field>
     <Field label="备注（可选）" htmlFor="account-note" hint="可填写使用者、设备或用途说明"><InputGroup className="soft-input"><InputGroupAddon><FileText /></InputGroupAddon><InputGroupInput id="account-note" value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：运维值班手机" maxLength={200} /></InputGroup></Field>
-    <Field label="Channel API Key" htmlFor="account-key" hint={existing ? "留空保留当前密钥" : "启用通道时必填"}><InputGroup className="soft-input"><InputGroupAddon><KeyRound /></InputGroupAddon><InputGroupInput id="account-key" type="password" autoComplete="new-password" value={apiKey} onChange={(event) => setAPIKey(event.target.value)} placeholder={existing?.api_key || "ak_..."} /></InputGroup></Field>
+    <Field label="Channel API Key" htmlFor="account-key" hint={keyExtracted ? "已从授权短信中识别并提取 API Key" : existing ? "可粘贴完整授权短信；留空保留当前密钥" : "可直接粘贴完整授权短信，系统会自动提取 ak_..."}><InputGroup className={cn("soft-input", keyExtracted && "key-extracted")}><InputGroupAddon>{keyExtracted ? <CheckCircle2 /> : <KeyRound />}</InputGroupAddon><InputGroupInput id="account-key" aria-describedby="account-key-hint" type="password" autoComplete="new-password" value={apiKey} onChange={(event) => updateAPIKey(event.target.value)} placeholder={existing?.api_key || "粘贴 ak_... 或完整授权短信"} /></InputGroup></Field>
     <details className="advanced-fields"><summary>高级协议地址</summary><div><Field label="WebSocket 地址" htmlFor="account-server"><InputGroup className="soft-input"><InputGroupAddon><Link2 /></InputGroupAddon><InputGroupInput id="account-server" value={serverURL} onChange={(event) => setServerURL(event.target.value)} placeholder="留空使用官方默认" /></InputGroup></Field><Field label="上传 API 地址" htmlFor="account-upload"><InputGroup className="soft-input"><InputGroupAddon><Link2 /></InputGroupAddon><InputGroupInput id="account-upload" value={uploadURL} onChange={(event) => setUploadURL(event.target.value)} placeholder="留空使用官方默认" /></InputGroup></Field></div></details>
     <label className="toggle-row"><span><strong>启用通道</strong><small>保存后立即连接 CMCC 网关</small></span><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /></label>
     {error && <div className="form-error"><AlertTriangle />{error}</div>}<div className="dialog-actions"><Button variant="outline" onClick={onClose}>取消</Button><Button type="submit" disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : <Save />}{saving ? "正在保存" : "保存通道"}</Button></div>
@@ -382,10 +393,10 @@ function DocsPage({ status }: { status: StatusResponse }) {
   ], [baseURL, exampleAccount])
   const copy = async (id: string, value: string) => { await navigator.clipboard.writeText(value); setCopied(id); window.setTimeout(() => setCopied(""), 1600) }
   return <PageFrame eyebrow="Help & Reference" title="API 文档" description="通道配置、通知组、应用 Token 与 REST API 使用说明。">
-    <section className="activation-card soft-card"><div className="activation-copy"><div className="section-icon"><QrCode /></div><div><p className="eyebrow">第一步</p><h2>开通中国移动新消息能力</h2><p>使用手机扫描右侧二维码，或直接打开中国移动页面，按照页面提示完成开通。建议使用需要接收消息的中国移动号码操作。</p><a className="activation-link" href={activationURL} target="_blank" rel="noreferrer"><ExternalLink />打开中国移动开通页面</a></div></div><div className="activation-qr"><img src="/cmcc-new-message-activation.svg" alt="中国移动新消息开通二维码" /><span>手机扫码开通</span></div></section>
+    <section className="activation-card soft-card"><div className="activation-copy"><div className="section-icon"><QrCode /></div><div><p className="eyebrow">获取 Channel API Key</p><h2>按照三步完成新消息授权</h2><ol className="activation-steps"><li><span className="activation-step-number">1</span><div><strong>开启手机新消息底层开关</strong><p>先确认手机系统已经开启新消息基础能力。不同品牌和系统入口可能不同，请按专项指引操作。</p><a className="activation-link" href={newMessageSwitchGuideURL} target="_blank" rel="noreferrer"><ExternalLink />查看底层开关指引</a></div></li><li><span className="activation-step-number">2</span><div><strong>开启新消息业务</strong><p>扫描右侧二维码，或打开中国移动业务页面，使用需要接收通知的中国移动号码完成开通。</p><a className="activation-link" href={newMessageBusinessURL} target="_blank" rel="noreferrer"><ExternalLink />打开新消息业务页面</a></div></li><li><span className="activation-step-number">3</span><div><strong>在新消息 ClawBot 完成立即授权</strong><p>进入到“新消息ClawBot”应用号后，点击下方菜单栏“绑定/解绑-立即授权”按钮，进入认证流程。完成后即可获得专属API Key。</p></div></li></ol></div></div><div className="activation-qr"><img src="/cmcc-new-message-activation.svg" alt="开启中国移动新消息业务二维码" /><span>第 2 步 · 扫码开启业务</span></div></section>
     <div className="docs-tabs"><SegmentedControl value={tab} options={[{ value: "guide", label: "使用指南", icon: <BookOpen /> }, { value: "concepts", label: "关键概念", icon: <Network /> }, { value: "api", label: "REST API", icon: <KeyRound /> }]} onChange={(value) => setTab(value as "guide" | "concepts" | "api")} /></div>
     {tab === "guide" ? <section className="guide-stack">
-      <GuideStep number="1" icon={<KeyRound />} title="添加 CMCC 通道">进入“账户状态” → “CMCC 通道” → “添加通道”。填写名称、可选备注和 Channel API Key；状态显示“已连接”后即可发送。每个 Key 默认向其绑定用户投递。</GuideStep>
+      <GuideStep number="1" icon={<KeyRound />} title="添加 CMCC 通道">进入“账户状态” → “CMCC 通道” → “添加通道”。可直接粘贴 ClawBot 返回的整段授权短信，系统会自动提取其中的 Channel API Key；也可以只粘贴 ak_...。状态显示“已连接”后即可发送。</GuideStep>
       <GuideStep number="2" icon={<UsersRound />} title="创建通知组">进入“账户状态” → “通知组” → “新建通知组”，勾选需要同时接收通知的多个 CMCC 通道。服务端会对各通道分别提交并汇总结果。</GuideStep>
       <GuideStep number="3" icon={<BellRing />} title="创建生产通知应用">进入“账户状态” → “通知应用” → “新建应用”，固定绑定一个 CMCC 通道或通知组。Token 只显示一次，服务端仅保存哈希，并可设置每分钟请求上限。</GuideStep>
       <GuideStep number="4" icon={<KeyRound />} title="接入业务系统">业务系统使用应用 Token 调用 <code>POST /v1/notify</code>，正文只需提供 <code>title</code> 和 <code>message</code>。不要把 Token 放进 URL、前端代码或日志；泄露时在应用卡片中立即轮换。</GuideStep>
@@ -424,6 +435,6 @@ function SegmentedControl({ value, options, onChange }: { value: string; options
 function AccountRow({ account, compact = false }: { account: AccountStatus; compact?: boolean }) { return <div className={cn("account-row", compact && "compact")}><div className={cn("account-avatar", account.connected && account.enabled ? "online" : "offline")}><Radio /></div><div className="account-main"><strong>{account.name}</strong><span>{account.note || account.api_key || "未配置密钥"}</span></div><div className={cn("status-badge", account.connected && account.enabled ? "online" : account.enabled ? "waiting" : "disabled")}><span />{account.connected && account.enabled ? "已连接" : account.enabled ? "未连接" : "已停用"}</div></div> }
 function PageFrame({ action, children, description, eyebrow, title }: { action?: ReactNode; children: ReactNode; description: string; eyebrow: string; title: string }) { return <div className="page-frame"><header className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{description}</p></div>{action && <div className="page-action">{action}</div>}</header>{children}</div> }
 function SectionHeading({ description, icon, title }: { description: string; icon: ReactNode; title: string }) { return <div className="section-heading"><div className="section-icon">{icon}</div><div><h2>{title}</h2><p>{description}</p></div></div> }
-function Field({ children, hint, htmlFor, label }: { children: ReactNode; hint?: string; htmlFor: string; label: string }) { return <div className="field"><div className="field-label"><label htmlFor={htmlFor}>{label}</label>{hint && <span>{hint}</span>}</div>{children}</div> }
+function Field({ children, hint, htmlFor, label }: { children: ReactNode; hint?: string; htmlFor: string; label: string }) { return <div className="field"><div className="field-label"><label htmlFor={htmlFor}>{label}</label>{hint && <span id={`${htmlFor}-hint`} aria-live="polite">{hint}</span>}</div>{children}</div> }
 function EmptyState({ description, icon, title }: { description: string; icon: ReactNode; title: string }) { return <div className="empty-state"><div>{icon}</div><strong>{title}</strong><p>{description}</p></div> }
 function BrandMark({ large = false }: { large?: boolean }) { return <div className={cn("brand-mark", large && "large")} aria-hidden="true"><MessageSquareText /><span /></div> }

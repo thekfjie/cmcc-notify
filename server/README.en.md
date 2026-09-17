@@ -7,6 +7,18 @@ NAS systems, scripts, CI/CD, agents and application services. It provides a
 management WebUI, REST API, scoped application tokens, multiple CMCC channels,
 notification groups and Docker deployment.
 
+## Obtain a Channel API Key
+
+1. [Enable the phone-level New Message switch](https://mp.weixin.qq.com/s/sWdK7mbKnLOdZmXXOMjAYA), which controls the underlying device capability.
+2. [Activate the New Message service](https://rcs.10086.cn/i/#/?RPwXWk9k0yk) for the China Mobile number that should receive notifications.
+3. Open the New Message ClawBot service account, choose **Bind/Unbind → Authorize now**, and complete authentication to obtain the dedicated API Key.
+
+When adding or editing a channel, the WebUI accepts either a bare `ak_...`
+value or the complete ClawBot authorization message. The browser extracts the
+key immediately and the server normalizes it again before persistence; the
+surrounding message is not written to state or logs. Configuration, environment
+and secret-file inputs use the same extraction behavior.
+
 ## Model
 
 - **CMCC channel** — one named Channel API Key configuration with an optional

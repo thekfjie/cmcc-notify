@@ -24,6 +24,10 @@ are released independently.
 - Bilingual root, Standalone and Gotify Plugin README documentation.
 - Real-device content rendering notes for plain text, URL detection,
   Unicode/emoji, images and files.
+- Channel API Key extraction from either a bare key or the complete ClawBot
+  authorization message across SDK, Server WebUI/API and Gotify configuration.
+- A three-step activation guide that distinguishes the phone-level New Message
+  switch, service activation and ClawBot authorization.
 
 ### Changed
 

@@ -69,6 +69,7 @@ func validateConfig(c *Config) error {
 			return fmt.Errorf("duplicate account name %q", a.Name)
 		}
 		names[a.Name] = struct{}{}
+		a.APIKey = cmcc.NormalizeAPIKey(a.APIKey)
 		if !cmcc.ValidAPIKey(a.APIKey) {
 			return fmt.Errorf("account %q has an invalid api_key", a.Name)
 		}

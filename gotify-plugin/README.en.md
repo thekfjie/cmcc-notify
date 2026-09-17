@@ -6,6 +6,16 @@ This independent Gotify v1 Go Plugin forwards Gotify messages to China Mobile
 New Message. It uses Gotify's native configuration editor and plugin detail
 page; it does not embed the Standalone Server WebUI.
 
+## Obtain a Channel API Key
+
+1. [Enable the phone-level New Message switch](https://mp.weixin.qq.com/s/sWdK7mbKnLOdZmXXOMjAYA).
+2. [Activate the New Message service](https://rcs.10086.cn/i/#/?RPwXWk9k0yk) for the China Mobile number that should receive notifications.
+3. Open the New Message ClawBot service account, choose **Bind/Unbind → Authorize now**, and complete authentication to obtain the dedicated API Key.
+
+`accounts[].api_key` accepts either a bare `ak_...` value or the complete
+ClawBot authorization message. Plugin validation keeps only the extracted key
+and does not retain the surrounding message.
+
 ## Build and test
 
 ```bash

@@ -175,6 +175,8 @@ button:focus-visible { outline: 3px solid color-mix(in oklab, var(--ring) 45%, t
 .field-label label { font-size: 13px; font-weight: 700; }
 .field-label span { color: var(--muted-foreground); font-size: 10px; text-align: right; }
 .soft-input { border-color: color-mix(in oklab, var(--border) 80%, transparent); background: color-mix(in oklab, var(--background) 48%, transparent); box-shadow: var(--soft-inset); }
+.soft-input.key-extracted { border-color: color-mix(in oklab, #25b975 48%, var(--border)); background: color-mix(in oklab, #25b975 7%, var(--card)); }
+.soft-input.key-extracted svg { color: #17a66a; }
 .message-input textarea { min-height: 148px; }
 .select-control { position: relative; min-width: 0; }
 .select-trigger { position: relative; display: flex; align-items: center; width: 100%; min-height: 46px; padding: 7px 40px 7px 41px; border: 1px solid color-mix(in oklab, var(--border) 80%, transparent); border-radius: 13px; color: var(--foreground); background: color-mix(in oklab, var(--background) 48%, transparent); box-shadow: var(--soft-inset); text-align: left; transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease, transform .14s ease; }
@@ -301,16 +303,22 @@ button:focus-visible { outline: 3px solid color-mix(in oklab, var(--ring) 45%, t
 .docs-note strong { font-size: 13px; }
 .docs-note p { margin: 5px 0 0; color: var(--muted-foreground); font-size: 12px; }
 .docs-note code { color: var(--foreground); }
-.activation-card { display: grid; grid-template-columns: minmax(0, 1fr) 190px; align-items: center; gap: 30px; margin-bottom: 22px; padding: 27px; }
+.activation-card { display: grid; grid-template-columns: minmax(0, 1fr) 190px; align-items: start; gap: 30px; margin-bottom: 22px; padding: 27px; }
 .activation-copy { display: flex; align-items: flex-start; gap: 16px; }
 .activation-copy .section-icon { margin-top: 2px; }
 .activation-copy > div:last-child { min-width: 0; }
 .activation-copy h2 { margin: 0; font-size: 20px; letter-spacing: -.025em; }
 .activation-copy > div:last-child > p:not(.eyebrow) { max-width: 680px; margin: 10px 0 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.75; }
+.activation-steps { display: flex; flex-direction: column; gap: 16px; margin: 20px 0 0; padding: 0; list-style: none; }
+.activation-steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 12px; }
+.activation-step-number { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: var(--primary); background: color-mix(in oklab, var(--primary) 10%, var(--card)); box-shadow: var(--soft-inset); font-size: 12px; font-weight: 850; }
+.activation-steps strong { display: block; padding-top: 3px; font-size: 14px; }
+.activation-steps p { max-width: 680px; margin: 6px 0 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.7; }
+.activation-steps .activation-link { margin-top: 9px; }
 .activation-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 17px; padding: 10px 13px; border: 1px solid color-mix(in oklab, var(--primary) 26%, var(--border)); border-radius: 12px; color: var(--primary); background: color-mix(in oklab, var(--primary) 7%, var(--card)); font-size: 13px; font-weight: 750; transition: transform .14s ease, background-color .14s ease, box-shadow .14s ease; touch-action: manipulation; }
 .activation-link:active { transform: translateY(1px) scale(.98); box-shadow: var(--soft-inset); }
 .activation-link svg { width: 16px; height: 16px; }
-.activation-qr { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 12px; border: 1px solid var(--border); border-radius: 17px; background: white; box-shadow: var(--soft-shadow-small); }
+.activation-qr { display: flex; flex-direction: column; align-items: center; gap: 9px; margin-top: 44px; padding: 12px; border: 1px solid var(--border); border-radius: 17px; background: white; box-shadow: var(--soft-shadow-small); }
 .activation-qr img { width: 150px; height: 150px; }
 .activation-qr span { color: #4b5563; font-size: 12px; font-weight: 700; }
 .docs-tabs { width: min(620px, 100%); margin-bottom: 20px; }

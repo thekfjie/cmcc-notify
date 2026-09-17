@@ -73,6 +73,7 @@ func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request.Name = strings.TrimSpace(request.Name)
+	request.APIKey = cmcc.NormalizeAPIKey(request.APIKey)
 	if err := validateAccountMutation(request, true); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -116,6 +117,7 @@ func (s *Server) account(w http.ResponseWriter, r *http.Request) {
 		if request.Name == "" {
 			request.Name = name
 		}
+		request.APIKey = cmcc.NormalizeAPIKey(request.APIKey)
 		if err := validateAccountMutation(request, false); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return

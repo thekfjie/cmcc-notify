@@ -22,5 +22,10 @@ if err := client.Connect(ctx); err != nil {
 result, err := client.SendText(ctx, "", "hello")
 ```
 
+`NewClient` also accepts the complete ClawBot authorization message and
+normalizes it to the embedded `ak_...` value. Applications can call
+`cmcc.ExtractAPIKey` when they need to preview extraction before creating a
+client.
+
 `result.Accepted` confirms a successful socket write. It is not a delivery or
 read receipt.

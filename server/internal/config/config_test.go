@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadUsesEnvironmentSecrets(t *testing.T) {
-	t.Setenv("TEST_CMCC_KEY", "ak_test")
+	t.Setenv("TEST_CMCC_KEY", "【新消息Claw】我的新消息Channel API Key为ak_test")
 	t.Setenv("TEST_AUTH", "local-token")
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(`listen: ":8080"
@@ -29,6 +29,13 @@ accounts:
 	}
 	if cfg.Redacted() != "primary=***" {
 		t.Fatalf("redaction = %q", cfg.Redacted())
+	}
+}
+
+func TestResolveRejectsAuthorizationTextWithoutAPIKey(t *testing.T) {
+	cfg := Config{Accounts: []Account{{Name: "primary", APIKey: "授权成功，请复制后续消息", Enabled: true}}}
+	if err := cfg.ResolveAndValidate(); err == nil || !strings.Contains(err.Error(), "invalid or missing API key") {
+		t.Fatalf("error = %v", err)
 	}
 }
 

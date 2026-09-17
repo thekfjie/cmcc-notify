@@ -6,6 +6,17 @@ Standalone Server 是独立部署的 CMCC 通知网关，适合监控系统、NA
 CI/CD、Agent 和业务服务使用。它提供管理 WebUI、REST API、应用级 Token、
 多个 CMCC 通道、通知组和 Docker 部署。
 
+## 获取 Channel API Key
+
+1. [开启手机新消息底层开关](https://mp.weixin.qq.com/s/sWdK7mbKnLOdZmXXOMjAYA)：这是手机系统的新消息基础能力开关；
+2. [开启新消息业务](https://rcs.10086.cn/i/#/?RPwXWk9k0yk)：扫码或打开页面，为实际接收通知的中国移动号码开通业务；
+3. 进入“新消息ClawBot”应用号后，点击下方菜单栏“绑定/解绑-立即授权”按钮，进入认证流程。完成后即可获得专属 API Key。
+
+在 WebUI 添加或编辑通道时，可直接粘贴纯 `ak_...`，也可以粘贴 ClawBot
+返回的整段授权短信。浏览器会立即提取 Key，服务端保存前还会再次规范化；整段
+短信不会进入状态文件或日志。配置文件、环境变量和 Secret 文件入口也支持相同
+提取行为。
+
 ## 数据模型
 
 - **CMCC 通道**：一份命名的 Channel API Key 配置，可填写备注。消息默认发送给
