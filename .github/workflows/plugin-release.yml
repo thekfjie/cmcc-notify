@@ -24,6 +24,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26.0'
+          cache-dependency-path: |
+            cmcc/go.sum
+            gotify-plugin/go.sum
       - uses: docker/setup-qemu-action@v3
       - name: Check Gotify module compatibility
         working-directory: gotify-plugin

@@ -20,6 +20,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26.0'
+          cache-dependency-path: |
+            cmcc/go.sum
+            gotify-plugin/go.sum
       - working-directory: gotify-plugin
         run: make check
       - name: Build Gotify plugin

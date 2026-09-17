@@ -19,6 +19,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26.0'
+          cache-dependency-path: |
+            cmcc/go.sum
+            server/go.sum
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
