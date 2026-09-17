@@ -13,7 +13,7 @@ repository ships two products on top of one shared CMCC protocol library.
 | Already using Gotify | **Gotify Plugin** — forward selected Gotify messages to CMCC | [`gotify-plugin/`](gotify-plugin/) |
 | Looking for a standalone deployment | **Standalone Server** — application tokens, notification REST API, management WebUI and Docker deployment | [`server/`](server/) |
 
-Standalone 的开通、账户、收件人群组、应用级通知 API 以及单人/群组文字与多媒体发送，请直接查看
+Standalone 的开通、CMCC 通道、本地号码组、应用级通知 API 以及单目标/本地扇出文字与多媒体发送，请直接查看
 [`server/README.md`](server/README.md)。相同说明也内置在 WebUI 的“API 文档 → 使用指南”中。
 
 Both products use [`cmcc/`](cmcc/), which owns only CMCC authentication,
@@ -95,6 +95,17 @@ reliable delivery/read receipt, so the API reports `accepted` separately from
 
 See [`docs/cmcc-protocol.md`](docs/cmcc-protocol.md) for the known wire format
 and limitations.
+
+## Concepts and local fan-out
+
+CMCC Notify uses a **CMCC channel** to mean one configured Channel API Key and
+uses `to` as the observed recipient-routing field. A **local number group** is
+only a stored list of `to` targets: sending to it produces N one-to-one frames
+through the selected channel. It is not a native CMCC group, broadcast API or
+chat room.
+
+The exact Chinese terminology, evidence levels and current/future data models
+are documented in [`docs/concepts.md`](docs/concepts.md).
 
 ## Source repository
 

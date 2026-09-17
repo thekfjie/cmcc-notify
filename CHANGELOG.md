@@ -3,7 +3,7 @@
 All notable changes will be documented here. This project follows Semantic
 Versioning independently for the CMCC SDK, Gotify Plugin and Standalone Server.
 
-## Unreleased — 2026-09-16
+## Unreleased — 2026-09-17
 
 ### Added
 
@@ -28,9 +28,12 @@ Versioning independently for the CMCC SDK, Gotify Plugin and Standalone Server.
   the Standalone WebUI.
 - A reusable themed dropdown component for every Standalone selector, including
   accessible keyboard controls, status details and light/dark popup styling.
-- A synchronized Standalone usage guide covering CMCC activation, accounts,
-  local recipient groups, group fan-out results and multimedia delivery,
+- A synchronized Standalone usage guide covering CMCC activation, channels,
+  local number groups, fan-out results and multimedia delivery,
   including a mobile activation QR code in the WebUI.
+- A canonical Chinese concepts guide and matching WebUI reference that clearly
+  separates CMCC channels, `to` targets, local number groups, local fan-out and
+  future recipient-directory ideas.
 
 ### Fixed
 
@@ -40,5 +43,7 @@ Versioning independently for the CMCC SDK, Gotify Plugin and Standalone Server.
   updates.
 - Preserve the selected media type instead of submitting every WebUI media
   message as `FILE`.
-- Allow CMCC accounts to be renamed and atomically migrate every notification
+- Allow CMCC channel configurations to be renamed and atomically migrate every notification
   application that references the previous account name.
+- Mark group responses as `local_fanout` with `native_broadcast: false`, return
+  HTTP 207 for partial failure, and show each target's result in the WebUI.

@@ -331,7 +331,7 @@ func (p *GotifyPlugin) GetDisplay(_ *url.URL) string {
 		"| --- | --- |",
 		fmt.Sprintf("| 插件 | %s |", enabledLabel(cfg.Enabled)),
 		fmt.Sprintf("| Gotify 消息流 | %s |", connectedLabel(streamConnected)),
-		fmt.Sprintf("| CMCC 账户 | %d / %d 已连接 |", connectedAccounts, enabledAccounts),
+		fmt.Sprintf("| CMCC 通道 | %d / %d 已连接 |", connectedAccounts, enabledAccounts),
 		fmt.Sprintf("| 已成功转发 | %d |", p.stats.sent.Load()),
 		fmt.Sprintf("| 转发失败 | %d |", p.stats.failed.Load()),
 	}
@@ -342,11 +342,11 @@ func (p *GotifyPlugin) GetDisplay(_ *url.URL) string {
 		lines = append(lines, fmt.Sprintf("| 最近错误 | `%s` |", markdownCell(lastError)))
 	}
 
-	lines = append(lines, "", "### 账户状态", "")
+	lines = append(lines, "", "### CMCC 通道状态", "")
 	if len(cfg.Accounts) == 0 {
-		lines = append(lines, "尚未配置 CMCC 账户。")
+		lines = append(lines, "尚未配置 CMCC 通道。")
 	} else {
-		lines = append(lines, "| 账户 | 配置 | 连接 | API Key | 默认接收号码 |", "| --- | --- | --- | --- | --- |")
+		lines = append(lines, "| 通道 | 配置 | 连接 | Channel API Key | 默认 to 目标 |", "| --- | --- | --- | --- | --- |")
 		for _, account := range cfg.Accounts {
 			client := p.clientFor(account)
 			lines = append(lines, fmt.Sprintf(
@@ -362,9 +362,9 @@ func (p *GotifyPlugin) GetDisplay(_ *url.URL) string {
 
 	lines = append(lines, "", "### 路由", "")
 	if len(cfg.Routes) == 0 {
-		lines = append(lines, "未配置路由时，消息会转发到所有已启用账户。")
+		lines = append(lines, "未配置路由时，消息会逐个转发到所有已启用通道；这不是 CMCC 原生群发。")
 	} else {
-		lines = append(lines, "| Gotify Applications | CMCC 账户 | 最低优先级 |", "| --- | --- | --- |")
+		lines = append(lines, "| Gotify Applications | CMCC 通道 | 最低优先级 |", "| --- | --- | --- |")
 		for _, route := range cfg.Routes {
 			applications := uintList(route.Applications)
 			accounts := strings.Join(route.Accounts, ", ")
@@ -380,7 +380,9 @@ func (p *GotifyPlugin) GetDisplay(_ *url.URL) string {
 		"### 使用说明",
 		"",
 		"- 配置内容由 Gotify 的统一 **Configurer** 面板保存。",
-		"- 文字转发需要账户设置 `default_to`；直接 API 请求也可以提供 `to`。",
+		"- YAML/API 为兼容性仍使用 `accounts` 和 `account` 字段；界面中的“通道”就是一份 Channel API Key 配置。",
+		"- 文字转发需要通道设置 `default_to`；直接 API 请求也可以提供 `to`。`to` 是实际路由目标，不是备注。",
+		"- 一条 Gotify 消息命中多个通道时，插件会对各通道分别发送；这属于插件侧扇出，不是 CMCC 原生广播或群聊。",
 		"- HTTP `202 Accepted` 仅表示消息已写入 CMCC 网关，不表示送达或已读。",
 	)
 	if basePath != "" {

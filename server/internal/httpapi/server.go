@@ -257,11 +257,13 @@ type recipientSendResult struct {
 }
 
 type batchSendResponse struct {
-	Group         string                `json:"group"`
-	Total         int                   `json:"total"`
-	AcceptedCount int                   `json:"accepted_count"`
-	FailedCount   int                   `json:"failed_count"`
-	Results       []recipientSendResult `json:"results"`
+	Mode            string                `json:"mode"`
+	NativeBroadcast bool                  `json:"native_broadcast"`
+	Group           string                `json:"group"`
+	Total           int                   `json:"total"`
+	AcceptedCount   int                   `json:"accepted_count"`
+	FailedCount     int                   `json:"failed_count"`
+	Results         []recipientSendResult `json:"results"`
 }
 
 func resolveRecipients(cfg config.Config, account config.Account, to, groupName string) ([]string, string, error) {
@@ -292,7 +294,7 @@ func sendMediaToRecipients(ctx context.Context, client *cmcc.Client, recipients 
 		result, err := client.SendMedia(ctx, message)
 		return result, nil, err
 	}
-	response := &batchSendResponse{Group: groupName, Total: len(recipients)}
+	response := &batchSendResponse{Mode: "local_fanout", NativeBroadcast: false, Group: groupName, Total: len(recipients)}
 	for _, recipient := range recipients {
 		message.To = recipient
 		message.MessageID = ""
@@ -315,7 +317,7 @@ func sendTextToRecipients(ctx context.Context, client *cmcc.Client, recipients [
 		result, err := client.SendText(ctx, recipients[0], content)
 		return result, nil, err
 	}
-	response := &batchSendResponse{Group: groupName, Total: len(recipients)}
+	response := &batchSendResponse{Mode: "local_fanout", NativeBroadcast: false, Group: groupName, Total: len(recipients)}
 	for _, recipient := range recipients {
 		result, sendErr := client.SendText(ctx, recipient, content)
 		item := recipientSendResult{To: recipient, SendResult: result}
@@ -333,6 +335,9 @@ func sendTextToRecipients(ctx context.Context, client *cmcc.Client, recipients [
 func batchStatus(response batchSendResponse) int {
 	if response.AcceptedCount == 0 {
 		return http.StatusBadGateway
+	}
+	if response.FailedCount > 0 {
+		return http.StatusMultiStatus
 	}
 	return http.StatusAccepted
 }

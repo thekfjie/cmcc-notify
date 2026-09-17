@@ -204,7 +204,7 @@ func TestMediaUploadGroupUploadsOnceAndFansOut(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Group != "family" || result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
+	if result.Mode != "local_fanout" || result.NativeBroadcast || result.Group != "family" || result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
 		t.Fatalf("result = %#v", result)
 	}
 	if result.MediaType != "FILE" || result.FileName != "archive.zip" || result.MediaURL != "https://cdn.example.invalid/archive.zip" {
@@ -285,7 +285,7 @@ func TestRemoteMediaGroupFansOutToEveryRecipient(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Total != 2 || result.AcceptedCount != 2 {
+	if result.Mode != "local_fanout" || result.NativeBroadcast || result.Total != 2 || result.AcceptedCount != 2 {
 		t.Fatalf("result = %#v", result)
 	}
 	recipients := map[string]bool{}
@@ -355,7 +355,7 @@ func TestGroupSendFansOutToEveryRecipient(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
+	if result.Mode != "local_fanout" || result.NativeBroadcast || result.Total != 2 || result.AcceptedCount != 2 || result.FailedCount != 0 {
 		t.Fatalf("result = %#v", result)
 	}
 	recipients := map[string]bool{}
@@ -369,5 +369,21 @@ func TestGroupSendFansOutToEveryRecipient(t *testing.T) {
 	}
 	if !recipients["13800138000"] || !recipients["13900139000"] {
 		t.Fatalf("recipients = %#v", recipients)
+	}
+}
+
+func TestBatchStatusDistinguishesPartialFailure(t *testing.T) {
+	tests := []struct {
+		response batchSendResponse
+		want     int
+	}{
+		{response: batchSendResponse{AcceptedCount: 2}, want: http.StatusAccepted},
+		{response: batchSendResponse{AcceptedCount: 1, FailedCount: 1}, want: http.StatusMultiStatus},
+		{response: batchSendResponse{FailedCount: 2}, want: http.StatusBadGateway},
+	}
+	for _, test := range tests {
+		if got := batchStatus(test.response); got != test.want {
+			t.Fatalf("batchStatus(%+v) = %d, want %d", test.response, got, test.want)
+		}
 	}
 }

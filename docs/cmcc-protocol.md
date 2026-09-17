@@ -11,7 +11,9 @@ The public China Mobile installation guide is
 It describes the China Mobile New Message Channel as supporting text and
 rich-media messages. Recipient-addressed rich-media delivery was subsequently
 verified against the live gateway and a real China Mobile New Message client
-on 2026-09-16.
+on 2026-09-16. The public guide does not document a recipient-array API,
+native broadcast, `groupId`, delivery receipts, or the authorization scope of
+arbitrary `to` values.
 
 ## Connection
 
@@ -62,6 +64,19 @@ The package posts multipart form data to `/upload` with:
 The expected JSON response is a `DataResult`; code `10200` is success and the
 remote media URL is returned in `data`. The reference implementation uses a
 200 MiB client-side limit and a 60-second upload timeout.
+
+## Recipient routing and local fan-out
+
+The observed and tested outbound schema uses a single `to` value per `send`
+frame. CMCC Notify therefore treats `to` as active routing data, not descriptive
+phone metadata. Whether a particular target is authorized remains a CMCC
+gateway decision; this project must not be described as an unrestricted SMS
+gateway.
+
+There is currently no verified native CMCC group/broadcast frame. Standalone
+`groups[].recipients` is a local list of `to` values. One group request sends N
+separate frames through the selected Channel API Key and returns per-target
+write results. See [`concepts.md`](concepts.md) for the user-facing terminology.
 
 ## Delivery semantics
 

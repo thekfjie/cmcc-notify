@@ -1,7 +1,7 @@
 # Gotify Plugin
 
 This directory is an independent Gotify v1 Go Plugin project. Gotify creates
-one plugin instance per user; each instance owns its CMCC accounts, routes and
+one plugin instance per user; each instance owns its CMCC channel configurations, routes and
 deduplication state.
 
 ## Build and test
@@ -48,6 +48,12 @@ The `client_token` is required because the Gotify Plugin API does not expose a
 receive-all-messages callback. The plugin connects to the user's `/stream`
 endpoint with this dedicated token. Do not reuse an application token.
 
+Each item under `accounts` represents one **CMCC channel configuration**: a
+Channel API Key, connection state and optional default `to` target. The YAML
+name remains `accounts` for configuration compatibility; it is not a China
+Mobile customer account or a recipient record. The `to` value is active
+routing data, not a phone-number note.
+
 The CMCC API key is validated for the documented `ak_`/`app_` prefixes and is
 never written to logs or the display page in full. Gotify's plugin config is
 stored in its database; operators should protect the database and backups.
@@ -58,10 +64,10 @@ The plugin intentionally uses Gotify's native plugin detail page instead of
 embedding the Standalone Server WebUI. Gotify renders the YAML configuration
 editor through the plugin `Configurer` capability and renders a Markdown
 status summary through `Displayer`. The summary includes the Gotify stream,
-redacted CMCC accounts, routing rules, forwarding counters and direct endpoint
+redacted CMCC channels, routing rules, forwarding counters and direct endpoint
 paths. Custom handlers remain under Gotify's standard plugin-token route.
 
-Account names in the YAML are routing identifiers. If an account is renamed,
+Channel names in the YAML `accounts` list are routing identifiers. If one is renamed,
 update the matching values in `routes[].accounts` in the same edit. The
 Standalone Server can migrate these references automatically because it owns
 both records; Gotify intentionally leaves YAML editing and validation inside
@@ -89,11 +95,16 @@ CMCC rich-media request:
 {"account":"primary","to":"13800138000","media":{"type":"IMAGE","url":"https://example.invalid/a.jpg","caption":"photo"}}
 ```
 
-If `to` is omitted, the account's `default_to` is used. Gotify stream media
-extras may also provide `to` or `phone`; otherwise forwarding uses the account
+If `to` is omitted, the channel's `default_to` is used. Gotify stream media
+extras may also provide `to` or `phone`; otherwise forwarding uses the channel
 default. Recipient-addressed PNG image and ZIP file delivery was verified on
 2026-09-16. The plugin is a native Gotify product and does not require
 OpenClaw.
+
+The plugin does not expose Standalone's local number-group feature. A routing
+rule may select multiple configured channels; in that case the plugin sends
+one message through each selected channel. That is plugin-side fan-out, not a
+native CMCC broadcast, group chat, `groupId` or recipient-array request.
 
 The returned `accepted` field means the gateway accepted the WebSocket write;
 `acknowledged` remains false until the CMCC protocol defines a reliable text
