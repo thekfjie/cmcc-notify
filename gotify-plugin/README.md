@@ -111,11 +111,6 @@ GET  /plugin/<id>/custom/<plugin-token>/status
 远程媒体 URL 必须能被 CMCC 网关访问。需要上传本地文件时，建议使用
 Standalone Server 的 `/v1/send/media`。
 
-## 消息内容
-
-插件将 Gotify 标题与正文转换为纯文本通知。媒体随附文字与媒体内容按两条消息
-依次发送。
-
 HTTP `202 Accepted` 或 SDK 返回 `accepted: true` 只表示请求已写入 CMCC 网关，
 不代表终端送达或已读。
 

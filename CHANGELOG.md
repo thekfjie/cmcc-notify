@@ -22,7 +22,8 @@ are released independently.
   per-minute rate limits.
 - Local-file media upload for single channels and per-channel group uploads.
 - Bilingual root, Standalone and Gotify Plugin README documentation.
-- Documented text and media message behavior.
+- Documented CMCC client presentation and long-content behavior in the
+  protocol notes.
 - Channel API Key extraction from either a bare key or the complete ClawBot
   authorization message across SDK, Server WebUI/API and Gotify configuration.
 - A three-step activation guide that distinguishes the phone-level New Message

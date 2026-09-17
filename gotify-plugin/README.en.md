@@ -101,12 +101,6 @@ the Gotify message body is used as companion text.
 The remote URL must be accessible to the CMCC gateway. Use the Standalone
 Server `/v1/send/media` endpoint when local-file upload is required.
 
-## Message content
-
-The plugin converts Gotify titles and message bodies into plain-text
-notifications. Media companion text and media content are sent as two ordered
-messages.
-
 HTTP `202 Accepted` or `accepted: true` only means the request was written to
 the CMCC gateway; it is not a delivery or read receipt.
 
