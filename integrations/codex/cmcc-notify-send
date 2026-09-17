@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+"""Optional one-shot sender and Codex lifecycle-hook adapter for CMCC Notify."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+from typing import Any, Dict, Optional
+from urllib import error, parse, request
+
+
+DEFAULT_EVENTS: Dict[str, Dict[str, Any]] = {
+    "Stop": {
+        "enabled": True,
+        "title": "Codex 已完成",
+        "message": "{project}\n已完成当前任务",
+    },
+    "Interrupt": {
+        "enabled": True,
+        "title": "Codex 已中断",
+        "message": "{project}\n当前任务已中断",
+    },
+    "PermissionRequest": {
+        "enabled": True,
+        "title": "Codex 请求权限",
+        "message": "{project}\nCodex 正在等待你的确认",
+    },
+    "SubagentStop": {
+        "enabled": False,
+        "title": "Codex 子智能体已完成",
+        "message": "{project}\n子智能体已完成任务",
+    },
+    "SessionEnd": {
+        "enabled": True,
+        "title": "Codex 会话结束",
+        "message": "{project}\n会话已结束",
+    },
+}
+
+
+class SenderError(Exception):
+    pass
+
+
+class NoRedirectHandler(request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def default_config_path() -> Path:
+    configured = os.environ.get("CMCC_NOTIFY_CONFIG_FILE")
+    if configured:
+        return Path(configured).expanduser()
+    config_home = os.environ.get("XDG_CONFIG_HOME")
+    if config_home:
+        return Path(config_home).expanduser() / "cmcc-notify" / "codex.json"
+    return Path.home() / ".config" / "cmcc-notify" / "codex.json"
+
+
+def load_config(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SenderError("cannot read the private configuration file") from exc
+    if not isinstance(loaded, dict):
+        raise SenderError("private configuration must contain a JSON object")
+    return loaded
+
+
+def parse_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def setting(config: Dict[str, Any], env_name: str, *keys: str) -> Any:
+    environment = os.environ.get(env_name)
+    if environment is not None:
+        return environment
+    for key in keys:
+        if key in config:
+            return config[key]
+    return None
+
+
+def timeout_seconds(
+    config: Dict[str, Any], override: Optional[float], hook_mode: bool
+) -> float:
+    raw = override
+    if raw is None:
+        raw = setting(config, "CMCC_NOTIFY_TIMEOUT_SECONDS", "timeout_seconds")
+    try:
+        timeout = float(raw if raw is not None else 2)
+    except (TypeError, ValueError) as exc:
+        raise SenderError("timeout must be a number") from exc
+    if timeout <= 0:
+        raise SenderError("timeout must be greater than zero")
+    return min(timeout, 3.0) if hook_mode else min(timeout, 30.0)
+
+
+def endpoint(base_url: str) -> str:
+    candidate = base_url.strip().rstrip("/")
+    if not candidate:
+        raise SenderError("CMCC Notify URL is not configured")
+    if not candidate.endswith("/v1/notify"):
+        candidate += "/v1/notify"
+    parsed = parse.urlsplit(candidate)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise SenderError("CMCC Notify URL must be an HTTP or HTTPS URL")
+    return candidate
+
+
+def send_notification(
+    config: Dict[str, Any], title: str, message: str, timeout: float
+) -> None:
+    base_url = setting(config, "CMCC_NOTIFY_URL", "url", "server_url")
+    token = setting(
+        config,
+        "CMCC_NOTIFY_APPLICATION_TOKEN",
+        "application_token",
+        "token",
+    )
+    if not isinstance(base_url, str):
+        raise SenderError("CMCC Notify URL is not configured")
+    if not isinstance(token, str) or not token.strip():
+        raise SenderError("CMCC Notify Application Token is not configured")
+    if not title.strip() and not message.strip():
+        raise SenderError("title or message is required")
+
+    payload = json.dumps(
+        {"title": title, "message": message}, ensure_ascii=False
+    ).encode("utf-8")
+    notification = request.Request(
+        endpoint(base_url),
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": "Bearer " + token.strip(),
+            "Content-Type": "application/json",
+            "User-Agent": "cmcc-notify-send/1",
+        },
+    )
+    try:
+        opener = request.build_opener(NoRedirectHandler)
+        with opener.open(notification, timeout=timeout) as response:
+            response.read(4096)
+            if not 200 <= response.status < 300:
+                raise SenderError("CMCC Notify rejected the notification")
+    except (error.HTTPError, error.URLError, TimeoutError, OSError) as exc:
+        raise SenderError("notification request failed") from exc
+
+
+def read_hook_input() -> Dict[str, Any]:
+    try:
+        payload = json.load(sys.stdin)
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
+        raise SenderError("hook input is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise SenderError("hook input must contain a JSON object")
+    return payload
+
+
+def event_settings(
+    config: Dict[str, Any], event_name: str
+) -> Optional[Dict[str, Any]]:
+    defaults = DEFAULT_EVENTS.get(event_name)
+    if defaults is None:
+        return None
+    merged = dict(defaults)
+    configured_events = config.get("events")
+    if isinstance(configured_events, dict):
+        event_override = configured_events.get(event_name)
+        if isinstance(event_override, dict):
+            for key in ("enabled", "title", "message"):
+                if key in event_override:
+                    merged[key] = event_override[key]
+
+    env_suffix = "".join(
+        ("_" + char if char.isupper() and index else char.upper())
+        for index, char in enumerate(event_name)
+    )
+    enabled_override = os.environ.get("CMCC_NOTIFY_CODEX_" + env_suffix)
+    merged["enabled"] = parse_bool(
+        enabled_override, parse_bool(merged["enabled"], False)
+    )
+    return merged
+
+
+def project_context(payload: Dict[str, Any]) -> Dict[str, str]:
+    cwd = payload.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        cleaned = cwd.rstrip("/\\")
+        project = Path(cleaned).name or cleaned
+    else:
+        cwd = ""
+        project = "Codex"
+    tool_name = payload.get("tool_name")
+    return {
+        "project": project,
+        "cwd": cwd,
+        "event": str(payload.get("hook_event_name", "")),
+        "tool": tool_name if isinstance(tool_name, str) else "",
+    }
+
+
+def render(template: Any, values: Dict[str, str]) -> str:
+    rendered = template if isinstance(template, str) else ""
+    for key, value in values.items():
+        rendered = rendered.replace("{" + key + "}", value)
+    return rendered
+
+
+def parser() -> argparse.ArgumentParser:
+    cli = argparse.ArgumentParser(
+        description=(
+            "Send a CMCC Notify notification, or read a Codex hook event from stdin "
+            "when no title/message flags are supplied."
+        )
+    )
+    cli.add_argument("--title", help="notification title")
+    cli.add_argument("--message", help="notification message")
+    cli.add_argument("--config", type=Path, help="private JSON configuration path")
+    cli.add_argument("--timeout", type=float, help="HTTP timeout in seconds")
+    return cli
+
+
+def main() -> int:
+    arguments = parser().parse_args()
+    manual_mode = arguments.title is not None or arguments.message is not None
+    hook_mode = not manual_mode
+    try:
+        config = load_config((arguments.config or default_config_path()).expanduser())
+        timeout = timeout_seconds(config, arguments.timeout, hook_mode)
+        if manual_mode:
+            send_notification(
+                config,
+                arguments.title or "",
+                arguments.message or "",
+                timeout,
+            )
+            print("Notification accepted by CMCC Notify.")
+            return 0
+
+        payload = read_hook_input()
+        event_name = payload.get("hook_event_name")
+        if not isinstance(event_name, str):
+            return 0
+        configured_event = event_settings(config, event_name)
+        if configured_event is None or not parse_bool(
+            configured_event.get("enabled"), False
+        ):
+            return 0
+        values = project_context(payload)
+        send_notification(
+            config,
+            render(configured_event.get("title"), values),
+            render(configured_event.get("message"), values),
+            timeout,
+        )
+        return 0
+    except Exception as exc:  # Hook delivery must never change Codex behavior.
+        if hook_mode:
+            return 0
+        if isinstance(exc, SenderError):
+            print(f"cmcc-notify-send: {exc}", file=sys.stderr)
+        else:
+            print("cmcc-notify-send: unexpected failure", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

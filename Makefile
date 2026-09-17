@@ -4,17 +4,20 @@ GO ?= go
 PLUGIN_DIR := gotify-plugin
 SERVER_DIR := server
 
-.PHONY: test check test-independent check-boundaries build-server build-plugin fmt vet
+.PHONY: test test-integrations check test-independent check-boundaries build-server build-plugin fmt vet
 
-test:
+test: test-integrations
 	$(GO) test ./cmcc/... ./gotify-plugin/... ./server/...
+
+test-integrations:
+	python3 -m unittest discover -s integrations/codex -p 'test_*.py'
 
 test-independent:
 	cd cmcc && GOWORK=off $(GO) test ./...
 	cd gotify-plugin && GOWORK=off $(GO) test ./...
 	cd server && GOWORK=off $(GO) test ./...
 
-check: test-independent check-boundaries vet
+check: test-integrations test-independent check-boundaries vet
 	cd gotify-plugin && $(MAKE) check-gotify-mod
 
 check-boundaries:

@@ -27,6 +27,7 @@ cmcc-notify/
 ├── cmcc/                  shared CMCC Go SDK (independent module)
 ├── gotify-plugin/         complete Gotify Plugin project (independent module)
 ├── server/                complete Standalone Server (independent module)
+├── integrations/          optional examples built on the public REST API
 ├── deployments/           deployment examples for both products
 ├── docs/                  architecture and audited protocol notes
 ├── .github/workflows/     product-specific test and release pipelines
@@ -36,6 +37,16 @@ cmcc-notify/
 The three directories have separate `go.mod` files. Server-only dependencies
 do not enter the Gotify Plugin module graph. `go.work` is a developer
 convenience and is not required by released binaries.
+
+## Optional integrations
+
+Optional adapters live under [`integrations/`](integrations/). They are not
+additional server products and are never required to use the REST API. The
+Codex example provides a user-customizable lifecycle-hook adapter and a generic
+one-shot sender while keeping `POST /v1/notify` as the only integration
+contract. Users may instead call that endpoint directly from their own scripts.
+
+See [`integrations/codex/`](integrations/codex/) for the optional Codex example.
 
 ## Development
 

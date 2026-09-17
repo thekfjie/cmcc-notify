@@ -5,6 +5,7 @@ cmcc-notify/
 ├── cmcc/                         shared CMCC SDK
 ├── gotify-plugin/                independent Gotify Go Plugin
 ├── server/                       independent standalone HTTP service
+├── integrations/                 optional clients and reference adapters
 ├── deployments/                  product-specific deployment material
 ├── docs/                         protocol and architecture notes
 └── .github/workflows/            test and release workflows
@@ -51,6 +52,19 @@ The current release deliberately has no generic Recipient entity. Groups store
 target strings rather than recipient IDs, and every send selects exactly one
 CMCC channel. See [`concepts.md`](concepts.md) for the terminology boundary and
 the possible future multi-channel recipient model.
+
+## Optional integration boundary
+
+`integrations/` contains optional examples that consume the Standalone
+Server's public application API. They do not add a product, Go module, daemon
+or server-side special case. The Codex example may translate lifecycle event
+JSON into a normal `POST /v1/notify` request, but the server sees only an
+ordinary notification application and remains unaware of Codex.
+
+The reference sender is intentionally replaceable: users may customize its
+event mapping, invoke it as a generic one-shot command, or call `/v1/notify`
+directly. Integration credentials are ordinary Application Tokens and must not
+be confused with the administrator token or a CMCC Channel API Key.
 
 ## Compatibility
 
