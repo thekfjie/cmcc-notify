@@ -18,6 +18,7 @@ WORKDIR /src/server
 RUN GOWORK=off go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/cmcc-notify ./cmd/cmcc-notify
 
 FROM debian:bookworm-slim
+ENV TZ=Asia/Shanghai
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \

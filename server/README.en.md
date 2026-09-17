@@ -26,7 +26,8 @@ and secret-file inputs use the same extraction behavior.
 - **Notification group** — a set of CMCC channels. A group request sends once
   through every channel and returns per-channel results.
 - **Notification application** — a scoped caller identity with its own token,
-  fixed channel or group, and per-minute request limit.
+  fixed channel or group, per-minute request limit, and an independent switch
+  for appending the local send time.
 
 ## Quick deployment
 
@@ -73,6 +74,11 @@ are never returned to the browser.
 Create an application in **Account Status → Notification Applications** and
 bind it to one channel or group. The full `cn_app_...` token is shown once;
 only its SHA-256 hash is stored.
+
+New applications append `发送时间：HH:MM:SS` to the message body by default.
+This can be disabled in the application editor. The time uses the server
+process's local timezone. Containers default to `Asia/Shanghai`; override it
+with the `TZ` environment variable when needed.
 
 ```bash
 curl -X POST http://localhost:8080/v1/notify \

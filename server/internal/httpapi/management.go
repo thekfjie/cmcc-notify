@@ -326,6 +326,7 @@ func (s *Server) settingsResponse(cfg config.Config) settingsResponse {
 		response.Applications = append(response.Applications, applicationSetting{
 			Name: application.Name, Enabled: application.Enabled, Account: application.Account,
 			Group:              application.Group,
+			IncludeSendTime:    application.SendTimeEnabled(),
 			RateLimitPerMinute: application.RateLimitPerMinute, TokenHint: application.TokenHint,
 		})
 	}

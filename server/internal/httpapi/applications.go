@@ -29,6 +29,7 @@ type applicationSetting struct {
 	Enabled            bool   `json:"enabled"`
 	Account            string `json:"account,omitempty"`
 	Group              string `json:"group,omitempty"`
+	IncludeSendTime    bool   `json:"include_send_time"`
 	RateLimitPerMinute int    `json:"rate_limit_per_minute"`
 	TokenHint          string `json:"token_hint"`
 }
@@ -38,6 +39,7 @@ type applicationMutation struct {
 	Enabled            bool   `json:"enabled"`
 	Account            string `json:"account"`
 	Group              string `json:"group"`
+	IncludeSendTime    *bool  `json:"include_send_time"`
 	RateLimitPerMinute int    `json:"rate_limit_per_minute"`
 }
 
@@ -164,6 +166,9 @@ func (s *Server) application(w http.ResponseWriter, r *http.Request) {
 				application.Enabled = request.Enabled
 				application.Account = strings.TrimSpace(request.Account)
 				application.Group = strings.TrimSpace(request.Group)
+				if request.IncludeSendTime != nil {
+					application.IncludeSendTime = cloneBool(request.IncludeSendTime)
+				}
 				application.RateLimitPerMinute = request.RateLimitPerMinute
 				return nil
 			}
@@ -225,6 +230,7 @@ func (s *Server) notify(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	text = withApplicationSendTime(text, application, s.now())
 	targets, resolvedGroup, err := resolveTargets(cfg, application.Account, application.Group)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -252,9 +258,18 @@ func applicationFromMutation(request applicationMutation, token string) config.A
 	return config.Application{
 		Name: strings.TrimSpace(request.Name), Enabled: request.Enabled,
 		Account: strings.TrimSpace(request.Account), Group: strings.TrimSpace(request.Group),
+		IncludeSendTime:    cloneBool(request.IncludeSendTime),
 		RateLimitPerMinute: request.RateLimitPerMinute,
 		TokenHash:          config.HashApplicationToken(token), TokenHint: config.ApplicationTokenHint(token),
 	}
+}
+
+func cloneBool(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func newApplicationToken() (string, error) {
@@ -325,6 +340,13 @@ func notificationText(request notifyRequest) (string, error) {
 		return title, nil
 	}
 	return title + "\n\n" + message, nil
+}
+
+func withApplicationSendTime(text string, application config.Application, now time.Time) string {
+	if !application.SendTimeEnabled() {
+		return text
+	}
+	return text + "\n\n发送时间：" + now.Format("15:04:05")
 }
 
 func applicationResource(r *http.Request) (string, bool, error) {

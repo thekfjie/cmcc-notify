@@ -4,6 +4,8 @@ services:
       context: ../..
       dockerfile: server/Dockerfile
     restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

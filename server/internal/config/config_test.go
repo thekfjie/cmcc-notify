@@ -115,3 +115,13 @@ func TestResolveRejectsDuplicateApplicationTokens(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestApplicationSendTimeDefaultsToEnabled(t *testing.T) {
+	if !(Application{}).SendTimeEnabled() {
+		t.Fatal("omitted include_send_time should default to enabled")
+	}
+	disabled := false
+	if (Application{IncludeSendTime: &disabled}).SendTimeEnabled() {
+		t.Fatal("explicitly disabled include_send_time should remain disabled")
+	}
+}

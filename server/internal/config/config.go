@@ -33,11 +33,18 @@ type Application struct {
 	Enabled            bool   `yaml:"enabled"`
 	Account            string `yaml:"account,omitempty"`
 	Group              string `yaml:"group,omitempty"`
+	IncludeSendTime    *bool  `yaml:"include_send_time,omitempty"`
 	RateLimitPerMinute int    `yaml:"rate_limit_per_minute,omitempty"`
 	TokenHash          string `yaml:"token_hash,omitempty"`
 	TokenHint          string `yaml:"token_hint,omitempty"`
 	TokenEnv           string `yaml:"token_env,omitempty"`
 	TokenFile          string `yaml:"token_file,omitempty"`
+}
+
+// SendTimeEnabled keeps existing application configurations backward
+// compatible: an omitted include_send_time field means enabled.
+func (a Application) SendTimeEnabled() bool {
+	return a.IncludeSendTime == nil || *a.IncludeSendTime
 }
 
 type Config struct {

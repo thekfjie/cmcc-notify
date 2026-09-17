@@ -28,6 +28,8 @@ are released independently.
   authorization message across SDK, Server WebUI/API and Gotify configuration.
 - A three-step activation guide that distinguishes the phone-level New Message
   switch, service activation and ClawBot authorization.
+- An application-level switch, enabled by default, for appending the local
+  `HH:MM:SS` send time to notification messages.
 
 ### Changed
 

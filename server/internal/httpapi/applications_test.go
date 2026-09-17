@@ -52,6 +52,9 @@ func TestApplicationNotifyUsesScopedChannelAndRateLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	api.now = func() time.Time {
+		return time.Date(2026, time.September, 17, 18, 30, 5, 0, time.FixedZone("CST", 8*60*60))
+	}
 	defer api.Close()
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/notify", strings.NewReader(`{"title":"Server Alert","message":"Disk usage is high"}`))
@@ -70,7 +73,7 @@ func TestApplicationNotifyUsesScopedChannelAndRateLimit(t *testing.T) {
 	}
 	select {
 	case frame := <-frames:
-		if _, exists := frame["to"]; exists || frame["content"] != "Server Alert\n\nDisk usage is high" {
+		if _, exists := frame["to"]; exists || frame["content"] != "Server Alert\n\nDisk usage is high\n\n发送时间：18:30:05" {
 			t.Fatalf("frame = %#v", frame)
 		}
 	case <-time.After(time.Second):
@@ -83,6 +86,17 @@ func TestApplicationNotifyUsesScopedChannelAndRateLimit(t *testing.T) {
 	api.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") == "" {
 		t.Fatalf("rate limit status = %d, headers = %v, body = %s", response.Code, response.Header(), response.Body.String())
+	}
+}
+
+func TestApplicationSendTimeCanBeDisabled(t *testing.T) {
+	now := time.Date(2026, time.September, 17, 18, 30, 5, 0, time.FixedZone("CST", 8*60*60))
+	if got := withApplicationSendTime("hello", config.Application{}, now); got != "hello\n\n发送时间：18:30:05" {
+		t.Fatalf("default send time = %q", got)
+	}
+	disabled := false
+	if got := withApplicationSendTime("hello", config.Application{IncludeSendTime: &disabled}, now); got != "hello" {
+		t.Fatalf("disabled send time = %q", got)
 	}
 }
 
@@ -140,6 +154,9 @@ func TestApplicationManagementStoresOnlyTokenHashAndRotates(t *testing.T) {
 	if !config.ValidApplicationToken(oldToken) || len(created.Applications) != 1 {
 		t.Fatalf("created = %#v", created)
 	}
+	if !created.Applications[0].IncludeSendTime {
+		t.Fatal("new application did not enable send time by default")
+	}
 	state, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatal(err)
@@ -154,6 +171,30 @@ func TestApplicationManagementStoresOnlyTokenHashAndRotates(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), oldToken) || strings.Contains(response.Body.String(), "application_token") {
 		t.Fatalf("settings leaked token: %s", response.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPut, "/v1/applications/monitoring", strings.NewReader(`{
+  "name":"monitoring","enabled":false,"account":"primary","include_send_time":false,"rate_limit_per_minute":30
+}`))
+	request.Header.Set("Authorization", "Bearer admin-secret")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var updated settingsResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Applications) != 1 || updated.Applications[0].IncludeSendTime {
+		t.Fatalf("updated application = %#v", updated.Applications)
+	}
+	state, err = os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(state), "include_send_time: false") {
+		t.Fatalf("state did not persist disabled send time:\n%s", state)
 	}
 
 	request = httptest.NewRequest(http.MethodPost, "/v1/applications/monitoring/rotate-token", nil)
@@ -188,7 +229,7 @@ func TestApplicationManagementStoresOnlyTokenHashAndRotates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded.Applications) != 1 || loaded.Applications[0].TokenHash != config.HashApplicationToken(rotated.ApplicationToken) {
+	if len(loaded.Applications) != 1 || loaded.Applications[0].TokenHash != config.HashApplicationToken(rotated.ApplicationToken) || loaded.Applications[0].SendTimeEnabled() {
 		t.Fatalf("loaded applications = %#v", loaded.Applications)
 	}
 }

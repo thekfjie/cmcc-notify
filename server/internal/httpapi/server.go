@@ -25,6 +25,7 @@ type Server struct {
 	clients           map[string]*cmcc.Client
 	version           string
 	startedAt         time.Time
+	now               func() time.Time
 	cfgMu             sync.RWMutex
 	mu                sync.Mutex
 	mutationMu        sync.Mutex
@@ -44,6 +45,7 @@ func New(cfg config.Config, version string) (*Server, error) {
 		applicationRates: make(map[string]applicationRateWindow),
 		version:          version,
 		startedAt:        time.Now(),
+		now:              time.Now,
 	}, nil
 }
 
