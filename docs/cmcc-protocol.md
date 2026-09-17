@@ -44,9 +44,13 @@ platform-generated web-page entry. The complete content remains available
 through that entry. The preview threshold is controlled by the CMCC platform
 and is not treated as a stable character or byte limit by this project.
 
-Notifications intended for immediate reading should keep the main text
-concise. Detailed reports can still be sent unchanged and read through the
-CMCC web-page entry.
+For content intended to remain directly readable in the message view, the
+project recommends a maximum of 220 Unicode characters including whitespace
+and line breaks, no more than 20 total lines, and no more than 15 non-empty
+lines. This is a conservative composition budget derived from the currently
+observed client behavior, not a gateway validation rule. The SDK does not
+reject or modify content that exceeds it; longer reports can still be sent
+unchanged and read through the CMCC web-page entry.
 
 ## Media upload and send
 
