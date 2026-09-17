@@ -128,7 +128,9 @@ Real-device testing on September 17, 2026 showed plain-text rendering with
 preserved line breaks, automatic URL detection, Unicode and emoji support.
 Markdown, HTML, tables and fenced code are displayed as ordinary text. Images
 and files were verified through the upload-then-send flow. Media companion
-text is sent as a separate plain-text message before the media.
+text is sent as a separate plain-text message before the media. A CMCC Notify
+0.4.0 real-device check confirmed the same order: the text appeared first,
+followed by a separate multimedia notification and its client web entry.
 
 HTTP `202 Accepted` means the request was written to the CMCC gateway. A group
 with partial failures returns `207 Multi-Status`. Neither status is a delivery

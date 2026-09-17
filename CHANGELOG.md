@@ -37,6 +37,8 @@ are released independently.
   key before sending.
 - Media companion text is now sent as a separate plain-text message before a
   content-free media frame, matching observed terminal behavior.
+- Confirmed the ordered text-then-media flow on a real CMCC client with the
+  deployed Standalone 0.4.0 build.
 
 ### Fixed
 

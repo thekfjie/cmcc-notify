@@ -70,6 +70,12 @@ text as two ordered sends: a plain-text frame first, then a media frame with no
 `content` field. This is product behavior built on top of the protocol, not a
 native atomic text-and-media message.
 
+The ordered behavior was verified again on a real device on September 17,
+2026 with CMCC Notify 0.4.0: the companion text appeared first, followed by a
+separate multimedia notification containing the client-provided web link.
+This confirms the split-send approach preserves both the description and the
+media entry in the observed CMCC client.
+
 ## Text rendering
 
 Real-device tests on September 17, 2026 established the following client

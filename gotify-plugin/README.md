@@ -107,7 +107,8 @@ Standalone Server 的 `/v1/send/media`。
 2026 年 9 月 17 日真实终端测试结果：文字按纯文本展示，保留换行，自动识别
 URL，并支持 Unicode 与 Emoji。Markdown、HTML、表格和代码块不会被格式化
 渲染。插件可继续转发这些字符串，但不会获得 Gotify 中的 Markdown 展示效果。
-媒体随附文字会作为独立纯文本消息先行发送。
+CMCC Notify 0.4.0 的真实终端验证确认，媒体随附文字会先作为独立纯文本显示，
+随后出现单独的多媒体消息和客户端网页入口。
 
 HTTP `202 Accepted` 或 SDK 返回 `accepted: true` 只表示请求已写入 CMCC 网关，
 不代表终端送达或已读。

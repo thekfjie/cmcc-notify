@@ -97,7 +97,9 @@ Server `/v1/send/media` endpoint when local-file upload is required.
 Real-device testing on September 17, 2026 showed plain-text rendering with
 preserved line breaks, automatic URL detection, Unicode and emoji support.
 Markdown, HTML, tables and code fences are displayed as ordinary strings.
-Media companion text is sent as a separate plain-text message first.
+A CMCC Notify 0.4.0 real-device check confirmed that media companion text
+appears first, followed by a separate multimedia notification and its client
+web entry.
 
 HTTP `202 Accepted` or `accepted: true` only means the request was written to
 the CMCC gateway; it is not a delivery or read receipt.
